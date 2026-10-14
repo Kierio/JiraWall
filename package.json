@@ -1,0 +1,46 @@
+{
+  "name": "jira-stats-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live Jira wall dashboard for a Raspberry Pi with two screens and JQL-triggered celebration animations",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "cross-env PORT=3000 tsx watch --clear-screen=false server/index.ts",
+    "dev:web": "vite",
+    "dev:mock": "cross-env JIRA_MOCK=1 npm run dev",
+    "build": "npm run build:server && npm run build:web",
+    "build:server": "tsc -p tsconfig.json",
+    "build:web": "vite build",
+    "start": "node dist/server/index.js",
+    "start:mock": "cross-env JIRA_MOCK=1 node dist/server/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/static": "^8.3.0",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.12.7"
+  },
+  "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "canvas-confetti": "^1.9.4",
+    "chart.js": "^4.5.1",
+    "concurrently": "^9.2.5",
+    "cross-env": "^7.0.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^3.2.7"
+  }
+}

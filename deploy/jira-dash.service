@@ -1,0 +1,20 @@
+# Template: install.sh fills in __USER__, __DIR__ and __NODE__ and copies this to
+# /etc/systemd/system/jira-dash.service.
+[Unit]
+Description=Jira wall dashboard server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__NODE__ __DIR__/dist/server/index.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+# Keeps memory in check on long uptimes.
+Environment=NODE_OPTIONS=--max-old-space-size=256
+
+[Install]
+WantedBy=multi-user.target
