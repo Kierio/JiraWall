@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { IssueSummary } from '../../../shared/types';
 import { api } from '../lib/api';
+import { PriorityIcon } from '../lib/priority';
 
 export function Field({ label, hint, children, wide }: { label: string; hint?: ReactNode; children: ReactNode; wide?: boolean }) {
   return (
@@ -108,6 +109,7 @@ export function JqlEditor({
                 <ul>
                   {result.issues.map((i) => (
                     <li key={i.key}>
+                      <PriorityIcon name={i.priority} size={16} />{' '}
                       <a href={i.url} target="_blank" rel="noreferrer">
                         {i.key}
                       </a>{' '}
@@ -141,10 +143,12 @@ export function Section({ title, children, actions }: { title: string; children:
 export function ScaledBox({ width, height, children }: { width: number; height: number; children: ReactNode }) {
   const outer = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.5);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = outer.current;
     if (!node) return;
-    const observer = new ResizeObserver(() => setScale(Math.min(1, node.clientWidth / width)));
+    const measure = () => setScale(Math.min(1, node.clientWidth / width));
+    measure(); // right size from the first paint; the observer handles later resizes
+    const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
   }, [width]);

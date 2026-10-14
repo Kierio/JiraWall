@@ -16,36 +16,67 @@ export function initials(name: string): string {
   return ((parts[0][0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
 
-/** Dark-mode categorical slots, fixed order (see styles.css). */
-export const SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
-export const OTHER_COLOR = '#5f5e5a';
+export type ThemeName = 'dark' | 'light';
+
+export interface Palette {
+  /** Categorical slots in fixed order (validated per theme with the dataviz validator). */
+  series: string[];
+  other: string;
+  surface: string;
+  grid: string;
+  axis: string;
+  ink: string;
+  inkSecondary: string;
+  muted: string;
+}
+
+export const PALETTES: Record<ThemeName, Palette> = {
+  dark: {
+    series: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
+    other: '#5f5e5a',
+    surface: '#1a1a19',
+    grid: '#2c2c2a',
+    axis: '#383835',
+    ink: '#ffffff',
+    inkSecondary: '#c3c2b7',
+    muted: '#898781',
+  },
+  light: {
+    series: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'],
+    other: '#a8a79f',
+    surface: '#fcfcfb',
+    grid: '#e1e0d9',
+    axis: '#c3c2b7',
+    ink: '#0b0b0b',
+    inkSecondary: '#52514e',
+    muted: '#6f6e69',
+  },
+};
+
+/** rgba() of a #rrggbb colour. */
+export function withAlpha(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
 
 /**
  * Remembers which colour slot each label got, so a category keeps its colour when
- * others come and go (colour follows the entity, never its rank).
+ * others come and go (colour follows the entity, never its rank) and across themes.
  */
 export class ColorMemory {
   private slots = new Map<string, number>();
 
-  colorFor(label: string): string {
-    if (label === 'Other') return OTHER_COLOR;
+  colorFor(label: string, palette: Palette): string {
+    if (label === 'Other') return palette.other;
     let slot = this.slots.get(label);
     if (slot === undefined) {
       const used = new Set(this.slots.values());
-      slot = SERIES.findIndex((_, i) => !used.has(i));
-      if (slot === -1) slot = this.slots.size % SERIES.length;
+      slot = palette.series.findIndex((_, i) => !used.has(i));
+      if (slot === -1) slot = this.slots.size % palette.series.length;
       this.slots.set(label, slot);
     }
-    return SERIES[slot];
+    return palette.series[slot];
   }
 }
 
 export const STATUS = { good: '#0ca30c', warning: '#fab219', serious: '#ec835a', critical: '#d03b3b' };
-
-export const PRIORITY_ICON: Record<string, string> = {
-  highest: '⏫',
-  high: '🔼',
-  medium: '⏺️',
-  low: '🔽',
-  lowest: '⏬',
-};

@@ -33,9 +33,78 @@
   --mood-info: #199e70;
   --mood-alert: #d03b3b;
 
+  /* text versions of status colours (deltas), and theme-dependent effects */
+  --success-text: #0ca30c;
+  --serious-text: #ec835a;
+  --danger-text: #ff9c9c;
+  --warn-text: #ffd6a8;
+  --accent-wash: rgba(57, 135, 229, 0.16);
+  --banner-bg: rgba(26, 26, 25, 0.94);
+  --banner-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  --overlay-dim: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.7));
+  --spotlight: radial-gradient(circle at 50% 42%, rgba(255, 236, 170, 0.28) 0, rgba(255, 236, 170, 0.08) 22%, rgba(0, 0, 0, 0.75) 48%);
+  --admin-bar-bg: rgba(13, 13, 13, 0.92);
+  --toast-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --primary-hover: #2a78d6;
+
+  /* priority icons (mirrors PRIORITY_COLORS in lib/priority.tsx) */
+  --prio-highest: #e5484d;
+  --prio-high: #ec835a;
+  --prio-medium: #fab219;
+  --prio-low: #3987e5;
+  --prio-lowest: #8094ad;
+  --prio-unknown: #898781;
+
   --radius: 14px;
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
   --emoji: 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
+}
+
+/* Light theme: the light steps of the same palette, validated against #fcfcfb. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --page: #f1f0ec;
+  --surface-1: #fcfcfb;
+  --surface-2: #f4f3ef;
+  --surface-3: #e9e8e3;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #6f6e69;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+
+  --mood-celebrate: #2a78d6;
+  --mood-info: #138a60;
+  --mood-alert: #d03b3b;
+
+  --success-text: #006300;
+  --serious-text: #b5501f;
+  --danger-text: #b42323;
+  --warn-text: #8a4b00;
+  --accent-wash: rgba(42, 120, 214, 0.12);
+  --banner-bg: rgba(252, 252, 251, 0.97);
+  --banner-shadow: 0 30px 80px rgba(40, 38, 30, 0.25);
+  --overlay-dim: radial-gradient(ellipse at center, rgba(241, 240, 236, 0.35), rgba(225, 224, 217, 0.8));
+  --spotlight: radial-gradient(circle at 50% 42%, rgba(255, 214, 102, 0.45) 0, rgba(255, 236, 170, 0.2) 22%, rgba(225, 224, 217, 0.85) 48%);
+  --admin-bar-bg: rgba(241, 240, 236, 0.92);
+  --toast-shadow: 0 10px 30px rgba(40, 38, 30, 0.2);
+  --primary-hover: #256abf;
+
+  --prio-highest: #c62828;
+  --prio-high: #d9622b;
+  --prio-medium: #b07400;
+  --prio-low: #2a78d6;
+  --prio-lowest: #6b7a90;
 }
 
 * {
@@ -70,6 +139,12 @@ a {
 
 .emoji {
   font-family: var(--emoji);
+}
+
+/* Theme changes fade, but only once the first theme is in place (see lib/theme.ts). */
+.theme-fade body,
+.theme-fade .widget {
+  transition: background-color 0.6s ease, color 0.6s ease, border-color 0.6s ease;
 }
 
 /* ---------- Home ---------- */
@@ -231,11 +306,11 @@ a {
 }
 .delta-up-good,
 .delta-down-good {
-  color: var(--good);
+  color: var(--success-text);
 }
 .delta-up-bad,
 .delta-down-bad {
-  color: var(--serious);
+  color: var(--serious-text);
 }
 .delta-flat {
   color: var(--text-muted);
@@ -313,7 +388,7 @@ a {
 }
 .issue-row {
   display: grid;
-  grid-template-columns: 26px 120px minmax(0, 1fr) auto;
+  grid-template-columns: 28px 120px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 8px 4px;
@@ -496,7 +571,7 @@ a {
 .anim-dim {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.7));
+  background: var(--overlay-dim);
 }
 .sprite {
   position: absolute;
@@ -516,9 +591,9 @@ a {
   max-width: 82vw;
   padding: 36px 48px;
   border-radius: 28px;
-  background: rgba(26, 26, 25, 0.94);
+  background: var(--banner-bg);
   border: 2px solid var(--mood-color, var(--mood-celebrate));
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--banner-shadow);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 28px;
@@ -592,7 +667,7 @@ a {
 .spotlight {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 50% 42%, rgba(255, 236, 170, 0.28) 0, rgba(255, 236, 170, 0.08) 22%, rgba(0, 0, 0, 0.75) 48%);
+  background: var(--spotlight);
 }
 .bubble {
   position: absolute;
@@ -608,4 +683,66 @@ a {
 }
 .ticket-card {
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+.prio-icon {
+  flex: none;
+  vertical-align: -0.15em;
+}
+.banner-sub .prio-icon,
+.banner-list .prio-icon {
+  margin-right: 8px;
+}
+.legend-label .prio-icon {
+  margin-right: 6px;
+}
+
+/* trend with an overlay: legend + net summary above the chart */
+.trend-multi {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 6px;
+}
+.trend-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 21px;
+}
+.trend-legend {
+  display: flex;
+  gap: 18px;
+  color: var(--text-secondary);
+}
+.trend-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.legend-line {
+  width: 26px;
+  height: 4px;
+  border-radius: 2px;
+}
+.net-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--text-secondary);
+}
+.net-summary strong {
+  color: var(--text-primary);
+}
+.trend-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.anim-run {
+  position: absolute;
+  inset: 0;
 }

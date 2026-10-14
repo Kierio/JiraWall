@@ -1,6 +1,6 @@
-// The animation implementations, keyed by the ids in shared/animations.ts.
+// Classic pack: the original 15 animations, keyed by the ids in shared/animations.ts.
 
-import { at, banner, el, pick, rand, run, sprite, wait, withLayer, type PlayFn, type Stage } from './stage';
+import { at, banner, el, pick, rand, run, sprite, wait, withLayer, type PlayFn, type Stage } from '../stage';
 
 const dim = (stage: Stage, fn: () => Promise<unknown>) => withLayer(stage, 'anim-dim', async () => void (await fn()));
 
@@ -379,7 +379,7 @@ const hazard: PlayFn = (s) =>
     warn.remove();
   });
 
-export const LIBRARY: Record<string, PlayFn> = {
+export const CLASSIC: Record<string, PlayFn> = {
   'thumbs-burst': thumbsBurst,
   'confetti-cannons': confettiCannons,
   'emoji-rain': emojiRain,

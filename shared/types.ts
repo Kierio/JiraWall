@@ -32,6 +32,14 @@ export interface Thresholds {
   direction: 'higher-is-worse' | 'higher-is-better';
 }
 
+export interface TrendOverlay {
+  /** JQL for the second series (the project scope is applied like the main JQL). */
+  jql: string;
+  /** Date field the second series is bucketed on. */
+  dateField: string;
+  label: string;
+}
+
 export interface Widget {
   id: string;
   title: string;
@@ -52,6 +60,12 @@ export interface Widget {
   dateField?: string;
   /** trend: number of days. */
   days?: number;
+  /** trend: legend label for the main series (e.g. "Closed"). */
+  seriesLabel?: string;
+  /** trend: optional second series drawn on the same axis (e.g. created per day). */
+  overlay?: TrendOverlay;
+  /** trend: show the totals and net difference above the chart when there is an overlay. */
+  showNet?: boolean;
   /** list / leaderboard / recent-events / breakdown: how many rows to show. */
   limit?: number;
   thresholds?: Thresholds;
@@ -85,7 +99,14 @@ export interface EventRule {
   sound: boolean;
 }
 
+export type ThemeMode = 'dark' | 'light' | 'scheduled';
+
 export interface Settings {
+  /** Screen theme. 'scheduled' is light between lightFrom and lightUntil, dark otherwise. */
+  theme: ThemeMode;
+  /** HH:MM, local time of the Pi. */
+  lightFrom: string;
+  lightUntil: string;
   /** JQL fragment ANDed onto every event rule and every widget with useScope, e.g. `project in (ABC, DEF)`. */
   projectScope: string;
   eventPollSec: number;
@@ -131,7 +152,7 @@ export interface GroupItem {
 export type WidgetData =
   | { kind: 'number'; value: number }
   | { kind: 'number-compare'; value: number; compare: number }
-  | { kind: 'trend'; labels: string[]; values: number[] }
+  | { kind: 'trend'; labels: string[]; series: Array<{ label: string; values: number[] }> }
   | { kind: 'groups'; items: GroupItem[]; total: number; truncated: boolean }
   | { kind: 'list'; issues: IssueSummary[] };
 

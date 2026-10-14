@@ -1,9 +1,13 @@
 import { ANIMATIONS, MOODS } from '../shared/animations.js';
 import { PRESET_RULES } from '../shared/presets.js';
+import { parseClock } from '../shared/theme.js';
 import type { DashboardConfig, EventRule, Settings, Widget, WidgetType } from '../shared/types.js';
 import { GRID_COLS, GRID_ROWS } from '../shared/types.js';
 
 export const DEFAULT_SETTINGS: Settings = {
+  theme: 'dark',
+  lightFrom: '08:00',
+  lightUntil: '18:00',
   projectScope: '',
   eventPollSec: 20,
   eventWindowMin: 15,
@@ -52,9 +56,12 @@ export const DEFAULT_WIDGETS: Widget[] = [
     compareJql: 'statusCategory = Done AND statusCategoryChangedDate >= startOfWeek("-1w") AND statusCategoryChangedDate < startOfWeek()',
     compareLabel: 'last week',
   }),
-  w('trend', 'Closed per day (14 days)', 'trend', 1, 3, 2, 9, 4, {
+  w('trend', 'Created vs closed (14 days)', 'trend', 1, 3, 2, 9, 4, {
     jql: 'statusCategory = Done',
     dateField: 'statusCategoryChangedDate',
+    seriesLabel: 'Closed',
+    overlay: { jql: '', dateField: 'created', label: 'Created' },
+    showNet: true,
     days: 14,
     refreshSec: 300,
   }),
@@ -133,6 +140,12 @@ export function normalizeWidget(raw: unknown): Widget {
   if (r.chart === 'bar' || r.chart === 'doughnut') widget.chart = r.chart;
   if (typeof r.dateField === 'string' && r.dateField) widget.dateField = r.dateField;
   if (r.days !== undefined) widget.days = int(r.days, 14, 2, 60);
+  if (typeof r.seriesLabel === 'string' && r.seriesLabel) widget.seriesLabel = r.seriesLabel;
+  if (r.overlay && typeof r.overlay === 'object') {
+    const o = obj(r.overlay);
+    widget.overlay = { jql: str(o.jql), dateField: str(o.dateField) || 'created', label: str(o.label) || 'Overlay' };
+    widget.showNet = r.showNet !== false;
+  }
   if (r.limit !== undefined) widget.limit = int(r.limit, 6, 1, 50);
   const t = obj(r.thresholds);
   if (r.thresholds && (t.amber !== undefined || t.red !== undefined)) {
@@ -171,6 +184,9 @@ export function normalizeSettings(raw: unknown): Settings {
   const r = obj(raw);
   const names = obj(r.screenNames);
   return {
+    theme: r.theme === 'light' || r.theme === 'scheduled' ? r.theme : 'dark',
+    lightFrom: parseClock(str(r.lightFrom)) !== undefined ? str(r.lightFrom) : DEFAULT_SETTINGS.lightFrom,
+    lightUntil: parseClock(str(r.lightUntil)) !== undefined ? str(r.lightUntil) : DEFAULT_SETTINGS.lightUntil,
     projectScope: str(r.projectScope, DEFAULT_SETTINGS.projectScope),
     eventPollSec: int(r.eventPollSec, DEFAULT_SETTINGS.eventPollSec, 10, 600),
     eventWindowMin: int(r.eventWindowMin, DEFAULT_SETTINGS.eventWindowMin, 2, 120),

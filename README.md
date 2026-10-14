@@ -179,18 +179,44 @@ Set a scope such as `project in (ABC, DEF)`. It is ANDed onto every event rule a
 
 Jira Cloud's search API rejects **unbounded** queries (ones with no restriction at all), so either set a scope or restrict each query yourself. Use **Test JQL** next to any query to see the match count and sample issues before you save.
 
+### Settings → Theme
+
+Choose **Dark**, **Light** or **Scheduled** for both screens. Scheduled shows light between two times you pick (default 08:00–18:00, the Pi's local time) and dark the rest of the day. The screens switch on their own with a gentle fade, and the window may cross midnight (e.g. 22:00–06:00).
+
+The admin page has its own ☀️/🌙 switch in the top bar: **Match screens**, Dark or Light, remembered in your browser only. Chart colours use validated palettes for each theme, so series keep their meaning in both.
+
 ### Widgets
 
 | Type                  | What it shows                                                                                                                | Example JQL                                                                               |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Number                | Count of matching issues, with an optional amber/red threshold                                                               | `type = Bug AND statusCategory != Done`                                                   |
 | Number vs. comparison | Two counts and the change between them                                                                                       | `created >= startOfWeek()` vs `created >= startOfWeek("-1w") AND created < startOfWeek()` |
-| Daily trend           | Count per day over N days, bucketed on a date field                                                                          | Base `statusCategory = Done`, date field `statusCategoryChangedDate`                      |
+| Daily trend           | Count per day over N days, bucketed on a date field. Optionally overlay a second line, e.g. created vs closed (see below)     | Base `statusCategory = Done`, date field `statusCategoryChangedDate`                      |
 | Breakdown chart       | Bar or doughnut grouped by any field: `status`, `assignee`, `priority`, `issuetype`, `labels`, `components`, `customfield_…` | `statusCategory != Done`                                                                  |
 | Leaderboard           | People ranked by count                                                                                                       | `statusCategory = Done AND statusCategoryChangedDate >= startOfWeek()`                    |
 | Issue list            | Top N issues; use ORDER BY                                                                                                   | `statusCategory != Done ORDER BY priority DESC, created ASC`                              |
 | Recent events         | Feed of the latest event-rule animations                                                                                     | _(none)_                                                                                  |
 | Clock & status        | Time, date and connection status                                                                                             | _(none)_                                                                                  |
+
+**Created vs closed (trend overlay):** turn on *Overlay a second line* on a trend widget, or click **⚡ Created vs closed preset**. The widget then shows:
+
+- closed per day (blue) and created per day (orange) on the same axis, with a legend;
+- each line's value for today;
+- a net summary, e.g. "Created 113 · Closed 140 · Net −27 ▼ shrinking". *Growing* means more tickets came in than were closed.
+
+The net summary can be turned off. An overlay doubles the trend's Jira queries, so keep its refresh at 300 s or more. Fresh installs ship with this as the default trend widget.
+
+**Priority icons:** issue lists, animation banners, the recent-events feed, the admin's test results, and breakdowns grouped by `priority` all show Jira-style icons. The shape carries the meaning, not just the colour:
+
+| Icon | Level | Also matches |
+| --- | --- | --- |
+| ⏫ red double chevron up | Highest | Blocker, Critical, Urgent, P0, P1 |
+| 🔼 orange chevron up | High | Major, P2 |
+| ═ amber bars | Medium | Normal, P3 |
+| 🔽 blue chevron down | Low | Minor, P4 |
+| ⏬ grey double chevron down | Lowest | Trivial, P5 |
+
+Names like "P2 - High" or "Critical (P1)" work too. Breakdowns grouped by priority are sorted Highest → Lowest.
 
 **Layout tab:** each screen is a 12×6 grid. Drag a widget to move it, and drag its corner to resize. Overlaps are outlined in red.
 
@@ -218,8 +244,33 @@ The **Add rule** menu includes presets: Bug squashed, Story shipped, Bug reporte
 
 ### Animations
 
-| Mood      | Animations                                                                                                      |
-| --------- | --------------------------------------------------------------------------------------------------------------- |
+32 animations in five packs. Every animation shows a banner with the person, ticket key, summary and priority icon.
+
+| Pack | Celebrate | Info | Alert |
+| --- | --- | --- | --- |
+| Classic | Thumbs-up burst, confetti cannons, emoji rain, fireworks, balloons, rocket launch, trophy spotlight, bubble pop | Mailbox drop, paper plane, ticket print, sparkle pulse | Siren, priority alarm, hazard stripes |
+| Party | Champagne pop 🍾, disco ball, dance floor 🕺, birthday cake 🎂 | | |
+| Game | Level up 🎮, slot machine 🎰, coin shower 💰, arcade high score 🕹️ | | |
+| Space & nature | Shooting stars 🌠, floating hearts ❤️, rainbow 🌈 | Sunrise 🌅 | |
+| Alert & info | | Radar ping 📡, news ticker 📰, doorbell 🔔 | "This is fine" fire 🔥, lighthouse |
+
+On the Animations tab you can:
+- turn whole packs or single animations on or off;
+- set the duration and the sound volume;
+- preview any animation on your laptop (**▶ Here**) or on the wall (**📺 Screens**).
+
+Sound and safety:
+- Sounds are synthesised in the browser, so there are no audio files. Some animations have their own sound: a cork pop, slot-machine reels, an 8-bit level-up, a ding-dong, and coin chimes.
+- Nothing flashes faster than about 1 Hz; lights fade or sweep instead of strobing.
+- Only emoji from Emoji 12 or earlier are used, so they draw on any up-to-date emoji font. The disco ball, coins and lighthouse are drawn with CSS.
+
+To add a new animation:
+
+1. Add an entry to `shared/animations.ts` (id, name, mood, pack, emoji, optional sound).
+2. Implement it in the matching file in `web/src/animations/library/`. Each animation is an `async (stage) => {}` function built from the helpers in `stage.ts`.
+3. `npm test` fails until every catalogue entry has an implementation.
+
+--------- | --------------------------------------------------------------------------------------------------------------- |
 | Celebrate | Thumbs-up burst, confetti cannons, emoji rain, fireworks, balloons, rocket launch, trophy spotlight, bubble pop |
 | Info      | Mailbox drop, paper plane, ticket print, sparkle pulse                                                          |
 | Alert     | Siren, priority alarm, hazard stripes. These pulse at 1 Hz or slower and never strobe.                          |
@@ -263,7 +314,7 @@ server/            Fastify app (index.ts), Jira client, widget scheduler, event 
 shared/            types, JQL helpers, animation catalogue and rule presets (used by server and web)
 web/src/screen/    the wall screens
 web/src/widgets/   widget components
-web/src/animations/ animation library, queue/overlay, sounds
+web/src/animations/ animation packs (library/), queue/overlay, sounds, animations.css
 web/src/admin/     admin page (Widgets, Layout, Event rules, Animations, Settings)
 deploy/            install.sh, setup-kiosk.sh (boot kiosk), kiosk.sh, restart-/remove-kiosk.sh, systemd unit
 test/              Vitest unit tests

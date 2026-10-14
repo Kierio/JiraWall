@@ -3,6 +3,7 @@ import type { DashboardConfig, EventRule } from '../../../shared/types';
 import { AnimationLayer, type AnimationLayerHandle } from '../animations/AnimationLayer';
 import { api } from '../lib/api';
 import { useStream } from '../lib/stream';
+import { ThemeContext, useAdminThemeChoice, useAppliedTheme, type AdminThemeChoice } from '../lib/theme';
 import { AnimationsTab } from './AnimationsTab';
 import { LayoutTab } from './LayoutTab';
 import { previewEvent } from './preview';
@@ -73,6 +74,12 @@ function AdminApp({ onLogout }: { onLogout: () => void }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>();
   const dirty = draft !== undefined && JSON.stringify(draft) !== savedJson;
+  // "Match screens" previews the (possibly unsaved) theme setting; Dark/Light are this browser's own choice.
+  const [themeChoice, setThemeChoice] = useAdminThemeChoice();
+  const screenTheme = draft?.settings ?? stream.config?.settings;
+  const theme = useAppliedTheme(
+    themeChoice === 'match' ? screenTheme : { theme: themeChoice, lightFrom: '00:00', lightUntil: '00:00' },
+  );
 
   const toast = useCallback((msg: string) => {
     setMessage(msg);
@@ -137,6 +144,7 @@ function AdminApp({ onLogout }: { onLogout: () => void }) {
   const playAnimation = (animationId: string) => layer.current?.enqueue(previewEvent({ animationId, settings: draft.settings }));
 
   return (
+    <ThemeContext.Provider value={theme}>
     <div className="admin">
       <header className="admin-bar">
         <div className="admin-title">
@@ -156,6 +164,14 @@ function AdminApp({ onLogout }: { onLogout: () => void }) {
           ))}
         </nav>
         <div className="admin-actions">
+          <label className="theme-pick" title="Theme for this admin page only">
+            <span aria-hidden="true">{theme === 'light' ? '☀️' : '🌙'}</span>
+            <select value={themeChoice} onChange={(e) => setThemeChoice(e.target.value as AdminThemeChoice)} aria-label="Admin page theme">
+              <option value="match">Match screens</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </label>
           <button
             className="btn"
             title="Refetch every widget now"
@@ -207,5 +223,6 @@ function AdminApp({ onLogout }: { onLogout: () => void }) {
       {message && <div className="toast">{message}</div>}
       <AnimationLayer ref={layer} settings={draft.settings} />
     </div>
+    </ThemeContext.Provider>
   );
 }

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { effectiveTheme } from '../../../shared/theme';
 import type { DashboardConfig } from '../../../shared/types';
 import { api } from '../lib/api';
 import type { StreamState } from '../lib/stream';
@@ -112,6 +113,39 @@ export function SettingsTab({
 
       <Section title="Screens">
         <div className="form-grid">
+          <Field
+            label="Theme"
+            wide
+            hint={
+              s.theme === 'scheduled'
+                ? `Light from ${s.lightFrom} until ${s.lightUntil} (the Pi's local time), dark the rest of the day. Right now: ${effectiveTheme(s, new Date())}.`
+                : 'Applies to both screens. The admin page has its own switch in the top bar.'
+            }
+          >
+            <div className="inline">
+              <div className="segmented">
+                {(
+                  [
+                    ['dark', '🌙 Dark'],
+                    ['light', '☀️ Light'],
+                    ['scheduled', '🕗 Scheduled'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button key={value} type="button" className={s.theme === value ? 'active' : ''} onClick={() => setSettings({ theme: value })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {s.theme === 'scheduled' && (
+                <>
+                  <span className="muted">Light from</span>
+                  <input type="time" className="time-input" value={s.lightFrom} onChange={(e) => e.target.value && setSettings({ lightFrom: e.target.value })} />
+                  <span className="muted">until</span>
+                  <input type="time" className="time-input" value={s.lightUntil} onChange={(e) => e.target.value && setSettings({ lightUntil: e.target.value })} />
+                </>
+              )}
+            </div>
+          </Field>
           <Field label="Screen 1 name">
             <input value={s.screenNames['1']} onChange={(e) => setSettings({ screenNames: { ...s.screenNames, '1': e.target.value } })} />
           </Field>

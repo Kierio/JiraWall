@@ -246,6 +246,67 @@ function WidgetEditor({
             <Field label="Days">
               <NumberInput value={widget.days ?? 14} min={2} max={60} onChange={(v) => set('days', v)} />
             </Field>
+            <Field label="Line label" hint="Shown in the legend when there is an overlay.">
+              <input value={widget.seriesLabel ?? ''} placeholder={widget.title} onChange={(e) => set('seriesLabel', e.target.value || undefined)} />
+            </Field>
+            <Field
+              label="Overlay a second line"
+              wide
+              hint="E.g. tickets created per day on top of tickets closed per day. Doubles the Jira queries, so refresh every 300 s or more."
+            >
+              <div className="inline">
+                <Toggle
+                  checked={Boolean(widget.overlay)}
+                  onChange={(on) =>
+                    onChange({
+                      ...widget,
+                      overlay: on ? { jql: '', dateField: 'created', label: 'Created' } : undefined,
+                      showNet: on ? true : undefined,
+                    })
+                  }
+                  label={widget.overlay ? 'On' : 'Off'}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  title="Closed per day (blue) with created per day (orange) on top, plus the net change"
+                  onClick={() =>
+                    onChange({
+                      ...widget,
+                      jql: 'statusCategory = Done',
+                      dateField: 'statusCategoryChangedDate',
+                      seriesLabel: 'Closed',
+                      overlay: { jql: '', dateField: 'created', label: 'Created' },
+                      showNet: true,
+                      refreshSec: Math.max(widget.refreshSec, 300),
+                    })
+                  }
+                >
+                  ⚡ Created vs closed preset
+                </button>
+              </div>
+            </Field>
+            {widget.overlay && (
+              <>
+                <Field label="Overlay JQL" wide hint="Leave empty to count every ticket in the project scope.">
+                  <JqlEditor
+                    value={widget.overlay.jql}
+                    onChange={(v) => set('overlay', { ...widget.overlay!, jql: v })}
+                    useScope={widget.useScope !== false}
+                    placeholder="(empty = everything in scope)"
+                  />
+                </Field>
+                <Field label="Overlay date field">
+                  <input list="date-fields" value={widget.overlay.dateField} onChange={(e) => set('overlay', { ...widget.overlay!, dateField: e.target.value })} />
+                </Field>
+                <Field label="Overlay label">
+                  <input value={widget.overlay.label} onChange={(e) => set('overlay', { ...widget.overlay!, label: e.target.value })} />
+                </Field>
+                <Field label="Net summary" hint={`Shows "${widget.overlay.label} − ${widget.seriesLabel || widget.title}" totals above the chart.`}>
+                  <Toggle checked={widget.showNet !== false} onChange={(v) => set('showNet', v)} label={widget.showNet !== false ? 'Shown' : 'Hidden'} />
+                </Field>
+              </>
+            )}
           </>
         )}
 

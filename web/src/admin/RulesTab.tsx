@@ -4,6 +4,7 @@ import { RULE_TEMPLATES } from '../../../shared/presets';
 import type { CreditMode, DashboardConfig, EventIssue, EventRule, Mood } from '../../../shared/types';
 import { api } from '../lib/api';
 import { timeAgo } from '../lib/format';
+import { PriorityIcon } from '../lib/priority';
 import { Field, Section, Select, Toggle } from './ui';
 
 const TRIGGERS: Array<{ value: string; label: string }> = [
@@ -227,20 +228,26 @@ function RuleEditor({
               : `None selected: any enabled ${rule.mood} animation is picked at random.`
           }
         >
-          <div className="chips">
-            {ANIMATIONS.map((a) => (
-              <button
-                type="button"
-                key={a.id}
-                className={`chip ${rule.animationIds.includes(a.id) ? 'on' : ''} ${a.mood !== rule.mood && !rule.animationIds.includes(a.id) ? 'dim' : ''}`}
-                onClick={() => toggleAnimation(a.id)}
-                title={disabled.includes(a.id) ? 'Disabled globally on the Animations tab' : MOOD_LABEL[a.mood]}
-              >
-                <span className="emoji">{a.emoji}</span> {a.name}
-                {disabled.includes(a.id) && ' (off)'}
-              </button>
-            ))}
-          </div>
+          {/* The rule's own mood first, so the likely picks are at the top. */}
+          {[rule.mood, ...MOODS.filter((m) => m !== rule.mood)].map((mood) => (
+            <div key={mood} className={`chip-group ${mood !== rule.mood ? 'other-mood' : ''}`}>
+              <div className="chip-group-label">{MOOD_LABEL[mood]}</div>
+              <div className="chips">
+                {ANIMATIONS.filter((a) => a.mood === mood).map((a) => (
+                  <button
+                    type="button"
+                    key={a.id}
+                    className={`chip ${rule.animationIds.includes(a.id) ? 'on' : ''} ${a.mood !== rule.mood && !rule.animationIds.includes(a.id) ? 'dim' : ''}`}
+                    onClick={() => toggleAnimation(a.id)}
+                    title={disabled.includes(a.id) ? 'Disabled globally on the Animations tab' : MOOD_LABEL[a.mood]}
+                  >
+                    <span className="emoji">{a.emoji}</span> {a.name}
+                    {disabled.includes(a.id) && ' (off)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </Field>
       </div>
 
@@ -262,6 +269,7 @@ function RuleEditor({
               <ul>
                 {test.issues?.map((i) => (
                   <li key={`${i.key}-${i.at}`}>
+                    <PriorityIcon name={i.priority} size={16} />{' '}
                     <a href={i.url} target="_blank" rel="noreferrer">
                       {i.key}
                     </a>{' '}

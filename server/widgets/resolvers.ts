@@ -1,6 +1,7 @@
 // Turns a widget definition into Jira calls and a data payload for the screens.
 
 import { combineJql, fieldIdFor, trendDayJql } from '../../shared/jql.js';
+import { PRIORITY_RANK, priorityLevel } from '../../shared/priority.js';
 import type { GroupItem, IssueSummary, Widget, WidgetData } from '../../shared/types.js';
 import { avatarOf, type JiraApi, type RawIssue } from '../jira/client.js';
 
@@ -112,16 +113,24 @@ export async function resolveWidget(widget: Widget, ctx: ResolveContext): Promis
 
     case 'trend': {
       const days = widget.days ?? 14;
-      const field = widget.dateField || 'created';
       const today = ctx.now?.() ?? new Date();
       const offsets = Array.from({ length: days }, (_, i) => days - 1 - i);
-      const values = await Promise.all(offsets.map((daysAgo) => jira.count(trendDayJql(jql, field, daysAgo))));
+      const perDay = (base: string, field: string) => Promise.all(offsets.map((daysAgo) => jira.count(trendDayJql(base, field, daysAgo))));
+      const sources = [{ label: widget.seriesLabel || widget.title, base: jql, field: widget.dateField || 'created' }];
+      if (widget.overlay) {
+        sources.push({
+          label: widget.overlay.label,
+          base: widgetJql(widget.useScope, widget.overlay.jql, ctx.projectScope),
+          field: widget.overlay.dateField || 'created',
+        });
+      }
+      const series = await Promise.all(sources.map(async (src) => ({ label: src.label, values: await perDay(src.base, src.field) })));
       const labels = offsets.map((daysAgo) => {
         const d = new Date(today);
         d.setDate(d.getDate() - daysAgo);
         return isoDate(d);
       });
-      return { kind: 'trend', labels, values };
+      return { kind: 'trend', labels, series };
     }
 
     case 'breakdown':
@@ -130,6 +139,8 @@ export async function resolveWidget(widget: Widget, ctx: ResolveContext): Promis
       const { fieldId } = groupAccessor(groupBy);
       const result = await jira.search(jql, [fieldId], GROUP_SCAN_LIMIT);
       let items = groupIssues(result.issues, groupBy);
+      // Priorities read best in their natural order (Highest → Lowest), not by count.
+      if (fieldId === 'priority') items.sort((a, b) => PRIORITY_RANK[priorityLevel(a.label)] - PRIORITY_RANK[priorityLevel(b.label)]);
       if (widget.type === 'leaderboard') items = items.filter((i) => i.label !== 'Unassigned');
       const limit = widget.limit ?? (widget.type === 'leaderboard' ? 6 : 12);
       if (items.length > limit) {

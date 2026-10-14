@@ -2,14 +2,17 @@ import { useRef } from 'react';
 import { GRID_COLS, GRID_ROWS, type ScreenId } from '../../../shared/types';
 import { AnimationLayer, type AnimationLayerHandle } from '../animations/AnimationLayer';
 import { useStream } from '../lib/stream';
+import { ThemeContext, useAppliedTheme } from '../lib/theme';
 import { WidgetView } from '../widgets/Widgets';
 
 export function Screen({ screenId }: { screenId: ScreenId }) {
   const layer = useRef<AnimationLayerHandle>(null);
   const stream = useStream({ kiosk: true, onEvent: (event) => layer.current?.enqueue(event) });
   const widgets = (stream.config?.widgets ?? []).filter((w) => w.layout.screen === screenId);
+  const theme = useAppliedTheme(stream.config?.settings);
 
   return (
+    <ThemeContext.Provider value={theme}>
     <div className="screen">
       {stream.config && widgets.length === 0 ? (
         <div className="screen-empty">
@@ -48,5 +51,6 @@ export function Screen({ screenId }: { screenId: ScreenId }) {
       {!stream.connected && <div className="conn-badge">⚠ Reconnecting…</div>}
       <AnimationLayer ref={layer} settings={stream.config?.settings} />
     </div>
+    </ThemeContext.Provider>
   );
 }

@@ -4,6 +4,7 @@
 import confetti from 'canvas-confetti';
 import type { DashboardEvent, Mood } from '../../../shared/types';
 import { initials } from '../lib/format';
+import { priorityIconMarkup } from '../lib/priority';
 
 export interface Stage {
   root: HTMLElement;
@@ -37,6 +38,11 @@ export function run(node: Element, keyframes: Keyframe[], options: KeyframeAnima
     () => undefined,
     () => undefined,
   );
+}
+
+/** A plain div on the stage (or inside `parent`), for CSS-drawn props. */
+export function div(stage: Stage, className: string, parent?: HTMLElement): HTMLDivElement {
+  return el('div', className, parent ?? stage.root);
 }
 
 /** An emoji sprite positioned with transforms. */
@@ -104,12 +110,14 @@ export async function banner(stage: Stage, options: BannerOptions = {}): Promise
 
   if (event.count === 1 && event.issues[0]) {
     const sub = el('div', 'banner-sub', text);
-    sub.textContent = `${event.issues[0].key} · ${event.issues[0].summary}`;
+    if (event.issues[0].priority) sub.innerHTML = priorityIconMarkup(event.issues[0].priority, 28);
+    sub.append(`${event.issues[0].key} · ${event.issues[0].summary}`);
   } else if (event.count > 1) {
     const list = el('div', 'banner-list', text);
     for (const issue of event.issues.slice(0, 5)) {
       const row = el('div', undefined, list);
-      row.textContent = `${issue.key} · ${issue.summary}${issue.person ? ` — ${issue.person.name}` : ''}`;
+      if (issue.priority) row.innerHTML = priorityIconMarkup(issue.priority, 22);
+      row.append(`${issue.key} · ${issue.summary}${issue.person ? ` — ${issue.person.name}` : ''}`);
     }
     if (event.issues.length > 5) {
       const more = el('div', 'muted', list);

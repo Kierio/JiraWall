@@ -62,7 +62,7 @@ describe('resolveWidget', () => {
       '((project = ABC) AND (statusCategory = Done)) AND (resolved >= startOfDay("-1d") AND resolved < startOfDay())',
       '((project = ABC) AND (statusCategory = Done)) AND (resolved >= startOfDay() AND resolved < startOfDay("+1d"))',
     ]);
-    expect(data).toEqual({ kind: 'trend', labels: ['2026-10-12', '2026-10-13', '2026-10-14'], values: [1, 2, 3] });
+    expect(data).toEqual({ kind: 'trend', labels: ['2026-10-12', '2026-10-13', '2026-10-14'], series: [{ label: 'W', values: [1, 2, 3] }] });
   });
 
   it('skips the scope when useScope is off', async () => {
