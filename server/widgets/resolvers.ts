@@ -1,9 +1,9 @@
 // Turns a widget definition into Jira calls and a data payload for the screens.
 
-import { combineJql, fieldIdFor, trendDayJql } from '../../shared/jql.js';
+import { combineJql, fieldIdFor, quoteField, trendDayJql } from '../../shared/jql.js';
 import { PRIORITY_RANK, priorityLevel } from '../../shared/priority.js';
 import type { GroupItem, IssueSummary, Widget, WidgetData } from '../../shared/types.js';
-import { avatarOf, type JiraApi, type RawIssue } from '../jira/client.js';
+import { avatarOf, parseJiraDate, type JiraApi, type RawIssue } from '../jira/client.js';
 
 export interface ResolveContext {
   jira: JiraApi;
@@ -15,6 +15,9 @@ export interface ResolveContext {
 
 /** Max issues read for grouped widgets (breakdown / leaderboard). */
 export const GROUP_SCAN_LIMIT = 2000;
+
+/** Max issues read per trend line before falling back to one count query per day. */
+export const TREND_SCAN_LIMIT = 3000;
 
 export function widgetJql(useScope: boolean | undefined, jql: string | undefined, scope: string): string {
   return combineJql([useScope !== false ? scope : '', jql]);
@@ -91,13 +94,14 @@ function isoDate(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Returns undefined for widgets that need no Jira data (clock, recent-events). */
+/** Returns undefined for widgets that need no Jira data (clock, recent-events, picture). */
 export async function resolveWidget(widget: Widget, ctx: ResolveContext): Promise<WidgetData | undefined> {
   const { jira } = ctx;
   const jql = widgetJql(widget.useScope, widget.jql, ctx.projectScope);
   switch (widget.type) {
     case 'clock':
     case 'recent-events':
+    case 'picture':
       return undefined;
 
     case 'number':
@@ -115,7 +119,7 @@ export async function resolveWidget(widget: Widget, ctx: ResolveContext): Promis
       const days = widget.days ?? 14;
       const today = ctx.now?.() ?? new Date();
       const offsets = Array.from({ length: days }, (_, i) => days - 1 - i);
-      const perDay = (base: string, field: string) => Promise.all(offsets.map((daysAgo) => jira.count(trendDayJql(base, field, daysAgo))));
+      const perDay = (base: string, field: string) => trendSeries(jira, base, field, offsets, today);
       const sources = [{ label: widget.seriesLabel || widget.title, base: jql, field: widget.dateField || 'created' }];
       if (widget.overlay) {
         sources.push({
@@ -155,4 +159,42 @@ export async function resolveWidget(widget: Widget, ctx: ResolveContext): Promis
       return { kind: 'list', issues: result.issues.map((i) => toIssueSummary(i, ctx.jiraBaseUrl)) };
     }
   }
+}
+
+/**
+ * Issues per day for one trend line, oldest first. Reads the matching issues'
+ * dates in one search and buckets them on the Pi's own calendar, which keeps the
+ * days lined up with the chart labels whatever timezone the Jira account uses, and
+ * gives exact counts (approximate-count can lag behind recent changes).
+ * Falls back to one count query per day when there are too many issues or the
+ * date field can't be read from the results.
+ */
+export async function trendSeries(jira: JiraApi, base: string, dateField: string, offsets: number[], today: Date): Promise<number[]> {
+  const first = new Date(today);
+  first.setDate(first.getDate() - Math.max(...offsets));
+  first.setHours(0, 0, 0, 0);
+  // Relative minutes don't depend on the Jira account's timezone, unlike startOfDay().
+  const minutes = Math.ceil((today.getTime() - first.getTime()) / 60_000) + 1;
+  const fieldId = fieldIdFor(dateField);
+  const result = await jira.search(combineJql([base, `${quoteField(dateField)} >= "-${minutes}m"`]), [fieldId], TREND_SCAN_LIMIT);
+
+  const times = result.issues.map((issue) => parseJiraDate(issue.fields[fieldId]));
+  const unreadable = result.issues.length > 0 && times.every((t) => t === undefined);
+  if (result.truncated || unreadable) {
+    return Promise.all(offsets.map((daysAgo) => jira.count(trendDayJql(base, dateField, daysAgo))));
+  }
+
+  const index = new Map(
+    offsets.map((daysAgo, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - daysAgo);
+      return [isoDate(d), i] as const;
+    }),
+  );
+  const values = offsets.map(() => 0);
+  for (const t of times) {
+    const i = t === undefined ? undefined : index.get(isoDate(new Date(t)));
+    if (i !== undefined) values[i]++;
+  }
+  return values;
 }

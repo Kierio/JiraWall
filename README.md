@@ -5,6 +5,8 @@ A live Jira dashboard for a team wall display, built for a **Raspberry Pi 5 with
 - **Stats as JQL widgets:** numbers, comparisons, daily trends, breakdown charts, leaderboards, issue lists, a recent-activity feed and a clock. You configure them from a web admin page.
 - **Event rules:** each rule is a JQL filter plus a trigger, such as _ticket closed_, _new ticket_ or _urgent ticket created_. When a rule fires, both screens play a random animation from that rule's pool: 👍 thumbs-up bursts, confetti cannons, fireworks, balloons, a rocket launch, a trophy spotlight, a siren, and more.
 - **Two independent screens:** `/screen/1` and `/screen/2`, each with its own drag-and-drop layout.
+- **TV power schedule:** the Pi turns the TVs on and off over HDMI-CEC at times you set (weekdays only, if you like).
+- **UK radio:** BBC, Global, Bauer and other stations through the TVs' speakers, with station and volume controls on the admin page.
 
 ## Contents
 
@@ -116,6 +118,17 @@ The token stays on the Pi. It is only ever sent from the server to Jira, and nev
    ```
 6. **Reboot** with `sudo reboot`. The Pi logs in to the desktop by itself, and each monitor opens its screen full screen.
 
+The installer also runs `deploy/setup-cec.sh` so the Pi can switch the TVs on and off (see [TV power](#settings--tv-power-hdmi-cec)).
+
+### Updating an existing install
+
+```bash
+cd ~/JiraStats
+bash deploy/update.sh
+```
+
+This pulls the latest code, rebuilds, sets up anything new (currently HDMI-CEC for the TV schedule), and restarts the server and the screens. If it tells you to reboot (the first time it sets up CEC), run `sudo reboot`.
+
 ### Start-on-boot kiosk (`deploy/setup-kiosk.sh`)
 
 `install.sh` runs this for you. Run it on its own to change kiosk settings or to set the kiosk up again. It makes these changes:
@@ -159,7 +172,7 @@ bash deploy/setup-kiosk.sh --reboot        # reboot when done
 | Restart the kiosk browsers (works over SSH) | `bash deploy/restart-kiosk.sh`                                        |
 | Screens on the wrong monitors               | `bash deploy/setup-kiosk.sh --swap`, then reboot (or swap the cables) |
 | Stop opening the browsers at boot           | `bash deploy/remove-kiosk.sh`                                         |
-| Update after `git pull`                     | `bash deploy/install.sh` (safe to re-run)                             |
+| Update an existing install                  | `bash deploy/update.sh` (pulls, rebuilds, restarts)                   |
 | Reload the screens remotely                 | Admin page → **Reload screens**                                       |
 
 Chromium restarts automatically if it crashes. The screens also reload themselves:
@@ -185,6 +198,29 @@ Choose **Dark**, **Light** or **Scheduled** for both screens. Scheduled shows li
 
 The admin page has its own ☀️/🌙 switch in the top bar: **Match screens**, Dark or Light, remembered in your browser only. Chart colours use validated palettes for each theme, so series keep their meaning in both.
 
+### Settings → TV power (HDMI-CEC)
+
+Turn on **Switch the TVs on and off automatically**, pick an on time, an off time and the days (default Mon–Fri, 08:00–18:00, the Pi's local time). At the on time the Pi wakes each TV and switches it to the Pi's input; at the off time it puts them in standby. Only the switch times act, so a TV someone turns on by hand out of hours stays on until the next scheduled change. **Turn on now** / **Turn off now** work any time, and the status line shows each TV's power state.
+
+It uses `cec-ctl` (from `v4l-utils`). `deploy/install.sh` and `deploy/update.sh` set it up by running `deploy/setup-cec.sh`, which:
+
+- installs `v4l-utils` and adds your user to the `video` group (access to `/dev/cec0` and `/dev/cec1`, one per HDMI port);
+- registers the Pi as a playback device on each port and prints each TV's power state;
+- adds `video=HDMI-A-1:1920x1080@60D video=HDMI-A-2:…` to `/boot/firmware/cmdline.txt` (a backup is kept) so both outputs stay enabled while the TVs sleep. Without it some TVs drop the HDMI link in standby and the screens can come back on the wrong monitor. Skip it with `--no-force-hdmi`.
+
+Run `bash deploy/setup-cec.sh --test` to turn the TVs off and back on. The TVs must have CEC turned on in their own settings; brands call it Anynet+ (Samsung), Bravia Sync (Sony), SimpLink (LG) or EasyLink (Philips).
+
+### Radio
+
+The **Radio** tab plays a UK station through one screen's HDMI output, so the sound comes from that TV's speakers. Changes apply straight away, without **Save**:
+
+- **Play/Stop**, a **volume** slider, and **Play on** to pick the screen.
+- **Only while the TVs are on** pauses the radio outside the TV power schedule.
+- Preset stations: BBC Radio 1, 1Xtra, 2, 3, 4, 4 Extra, 5 Live and 6 Music; Capital, Capital XTRA, Heart, Smooth, Classic FM, Radio X, LBC and Gold; Absolute, KISS, Magic and Greatest Hits Radio; Times Radio, talkSPORT and Virgin Radio.
+- **Find another station** searches UK stations on radio-browser.info. You can also paste any MP3/AAC stream or `.m3u8` address.
+
+Animation sound effects still play on top. The clock widget shows the station while the radio is on.
+
 ### Widgets
 
 | Type                  | What it shows                                                                                                                | Example JQL                                                                               |
@@ -197,6 +233,7 @@ The admin page has its own ☀️/🌙 switch in the top bar: **Match screens**,
 | Issue list            | Top N issues; use ORDER BY                                                                                                   | `statusCategory != Done ORDER BY priority DESC, created ASC`                              |
 | Recent events         | Feed of the latest event-rule animations                                                                                     | _(none)_                                                                                  |
 | Clock & status        | Time, date and connection status                                                                                             | _(none)_                                                                                  |
+| Picture               | An image from a web address (logo, webcam, chart), fitted or filling the card, optionally reloaded every N seconds           | _(none)_                                                                                  |
 
 **Created vs closed (trend overlay):** turn on *Overlay a second line* on a trend widget, or click **⚡ Created vs closed preset**. The widget then shows:
 
@@ -204,7 +241,11 @@ The admin page has its own ☀️/🌙 switch in the top bar: **Match screens**,
 - each line's value for today;
 - a net summary, e.g. "Created 113 · Closed 140 · Net −27 ▼ shrinking". *Growing* means more tickets came in than were closed.
 
-The net summary can be turned off. An overlay doubles the trend's Jira queries, so keep its refresh at 300 s or more. Fresh installs ship with this as the default trend widget.
+The net summary can be turned off. Fresh installs ship with this as the default trend widget.
+
+**How trends count:** each line is one Jira search over the whole period. The issues' dates are bucketed into days on the Pi's own clock, so the days match the chart labels even when the Jira account is set to another timezone. Counts are exact. When an event rule fires, trends and number widgets refresh within a few seconds instead of waiting for their next refresh. Above 3,000 issues per line, a trend falls back to one count query per day.
+
+**If the Closed line looks wrong, check the date field.** `statusCategoryChangedDate` only changes when an issue moves *between* categories. So in a workflow with Resolved → Closed (both in the Done category) the close isn't counted again, and an issue that was closed, reopened and closed again only counts on the last day. If your workflow sets a Resolution, `resolved` with base JQL `resolution is not EMPTY` may match what you mean by "closed" better.
 
 **Priority icons:** issue lists, animation banners, the recent-events feed, the admin's test results, and breakdowns grouped by `priority` all show Jira-style icons. The shape carries the meaning, not just the colour:
 
@@ -220,7 +261,7 @@ Names like "P2 - High" or "Critical (P1)" work too. Breakdowns grouped by priori
 
 **Layout tab:** each screen is a 12×6 grid. Drag a widget to move it, and drag its corner to resize. Overlaps are outlined in red.
 
-**Jira load:** each widget runs on its own refresh interval (default 60 s). A 14-day trend makes 14 count queries per refresh, so give trends 300 s or more.
+**Jira load:** each widget runs on its own refresh interval (default 60 s). A trend makes one search per line (paged, 100 issues per request), so 300 s is still a sensible refresh for busy projects.
 
 ### Event rules
 
@@ -315,8 +356,9 @@ shared/            types, JQL helpers, animation catalogue and rule presets (use
 web/src/screen/    the wall screens
 web/src/widgets/   widget components
 web/src/animations/ animation packs (library/), queue/overlay, sounds, animations.css
-web/src/admin/     admin page (Widgets, Layout, Event rules, Animations, Settings)
-deploy/            install.sh, setup-kiosk.sh (boot kiosk), kiosk.sh, restart-/remove-kiosk.sh, systemd unit
+web/src/admin/     admin page (Widgets, Layout, Event rules, Animations, Radio, Settings)
+server/tv/         HDMI-CEC TV power (cec-ctl) and its schedule
+deploy/            install.sh, update.sh, setup-kiosk.sh (boot kiosk), setup-cec.sh (TV power), kiosk.sh, restart-/remove-kiosk.sh, systemd unit
 test/              Vitest unit tests
 ```
 
@@ -336,6 +378,8 @@ test/              Vitest unit tests
 | Kiosk doesn't start at boot                       | Check that desktop auto-login is on (`sudo raspi-config` → System Options → Boot / Auto Login), then read `~/.config/jira-dash/kiosk.log`.              |
 | No sound                                          | Rules have their own sound toggle, and the Animations tab has a volume slider. Check the monitor or speaker volume too.                                 |
 | Closed tickets never celebrate                    | Use **What would have fired in the last 24h?** on the rule. If it's empty, adjust the filter or try the _Resolved_ trigger.                             |
+| TVs don't switch on/off                           | Settings → TV power shows each TV's state. Run `bash deploy/setup-cec.sh --test` and check CEC is on in the TVs' own menus. `journalctl -u jira-dash` logs every switch. |
+| No radio                                          | Check the Radio tab's **Play on** screen and volume, and the TV's own volume. If **Only while the TVs are on** is set, the radio is paused outside the TV schedule. Some streams go offline: try another station. |
 | Want a fresh start                                | Stop the service, delete `data/`, then start it again. Defaults are recreated.                                                                          |
 
 ## Security notes

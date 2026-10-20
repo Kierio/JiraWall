@@ -1,10 +1,10 @@
-import { useRef, useState } from 'react';
-import { effectiveTheme } from '../../../shared/theme';
-import type { DashboardConfig } from '../../../shared/types';
+import { useEffect, useRef, useState } from 'react';
+import { effectiveTheme, tvShouldBeOn } from '../../../shared/theme';
+import type { DashboardConfig, TvSchedule, TvStatus } from '../../../shared/types';
 import { api } from '../lib/api';
 import type { StreamState } from '../lib/stream';
 import { timeAgo } from '../lib/format';
-import { Field, JqlEditor, NumberInput, Section } from './ui';
+import { Field, JqlEditor, NumberInput, Section, Toggle } from './ui';
 
 export function SettingsTab({
   draft,
@@ -168,6 +168,8 @@ export function SettingsTab({
         </div>
       </Section>
 
+      <TvSection tv={s.tv} onChange={(tv) => setSettings({ tv })} />
+
       <Section title="Backup">
         <div className="inline">
           <button className="btn" onClick={exportConfig}>
@@ -190,5 +192,118 @@ export function SettingsTab({
         </div>
       </Section>
     </>
+  );
+}
+
+// Monday first, the way a work week reads; values are Date.getDay() numbers.
+const WEEKDAYS: Array<[number, string]> = [
+  [1, 'Mon'],
+  [2, 'Tue'],
+  [3, 'Wed'],
+  [4, 'Thu'],
+  [5, 'Fri'],
+  [6, 'Sat'],
+  [0, 'Sun'],
+];
+
+function TvSection({ tv, onChange }: { tv: TvSchedule; onChange: (tv: TvSchedule) => void }) {
+  const [status, setStatus] = useState<TvStatus>();
+  const [busy, setBusy] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  const load = async () => {
+    try {
+      setStatus(await api.tvStatus());
+      setError(undefined);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const power = async (on: boolean) => {
+    setBusy(on ? 'on' : 'off');
+    setError(undefined);
+    try {
+      setStatus(await api.tvPower(on));
+    } catch (err) {
+      setError((err as Error).message);
+      void load();
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const toggleDay = (day: number) =>
+    onChange({ ...tv, days: tv.days.includes(day) ? tv.days.filter((d) => d !== day) : [...tv.days, day].sort() });
+
+  const dayNames = WEEKDAYS.filter(([d]) => tv.days.includes(d)).map(([, n]) => n);
+  return (
+    <Section title="TV power (HDMI-CEC)">
+      <div className="form-grid">
+        <Field
+          label="Switch the TVs on and off automatically"
+          wide
+          hint={
+            tv.enabled
+              ? `On at ${tv.onAt}, standby at ${tv.offAt} (the Pi's local time) on ${dayNames.length ? dayNames.join(', ') : 'no days'}. Right now the schedule wants them ${tvShouldBeOn(tv, new Date()) ? 'on' : 'off'}. Only the switch times act, so a TV turned on by hand stays on until the next one.`
+              : 'Uses cec-ctl on the Pi (set it up once with bash deploy/setup-cec.sh). The TVs need HDMI-CEC turned on in their own settings (Anynet+, Bravia Sync, SimpLink…).'
+          }
+        >
+          <div className="inline">
+            <Toggle checked={tv.enabled} onChange={(enabled) => onChange({ ...tv, enabled })} label={tv.enabled ? 'On' : 'Off'} />
+            {tv.enabled && (
+              <>
+                <span className="muted">On at</span>
+                <input type="time" className="time-input" value={tv.onAt} onChange={(e) => e.target.value && onChange({ ...tv, onAt: e.target.value })} />
+                <span className="muted">off at</span>
+                <input type="time" className="time-input" value={tv.offAt} onChange={(e) => e.target.value && onChange({ ...tv, offAt: e.target.value })} />
+              </>
+            )}
+          </div>
+        </Field>
+        {tv.enabled && (
+          <Field label="Days" wide>
+            <div className="segmented">
+              {WEEKDAYS.map(([day, name]) => (
+                <button key={day} type="button" className={tv.days.includes(day) ? 'active' : ''} onClick={() => toggleDay(day)} aria-pressed={tv.days.includes(day)}>
+                  {name}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
+        <Field label="TVs now" wide>
+          <div className="inline">
+            <button className="btn" disabled={Boolean(busy)} onClick={() => power(true)}>
+              {busy === 'on' ? 'Turning on…' : '⏻ Turn on now'}
+            </button>
+            <button className="btn" disabled={Boolean(busy)} onClick={() => power(false)}>
+              {busy === 'off' ? 'Turning off…' : '⏾ Turn off now'}
+            </button>
+            <button className="btn" disabled={Boolean(busy)} onClick={load} title="Ask the TVs for their power state">
+              ⟳
+            </button>
+            <span>
+              {!status
+                ? '…'
+                : !status.available
+                  ? '⚠ cec-ctl is not installed on the server (run bash deploy/setup-cec.sh on the Pi)'
+                  : status.devices.length === 0
+                    ? '⚠ No CEC adapters found (/dev/cec*)'
+                    : status.devices.map((d) => `${d.device.replace('/dev/', '')}: ${d.power === 'on' ? 'on' : d.power === 'standby' ? 'standby' : 'unknown'}`).join(' · ')}
+            </span>
+          </div>
+        </Field>
+      </div>
+      {(error ?? status?.lastError) && <div className="jql-result error">⚠ {error ?? status?.lastError}</div>}
+      {status?.lastAction && (
+        <p className="muted small">
+          Last {status.lastAction.scheduled ? 'scheduled' : 'manual'} switch: {status.lastAction.on ? 'on' : 'off'}, {timeAgo(status.lastAction.at)}.
+        </p>
+      )}
+    </Section>
   );
 }

@@ -1,7 +1,7 @@
 // Polls each widget on its own interval, caches the result and broadcasts
 // changes. One Jira query per widget per interval, however many screens are open.
 
-import type { DashboardConfig, Widget, WidgetState } from '../shared/types.js';
+import type { DashboardConfig, Widget, WidgetState, WidgetType } from '../shared/types.js';
 import type { JiraApi } from './jira/client.js';
 import type { SseHub } from './sse.js';
 import { resolveWidget } from './widgets/resolvers.js';
@@ -64,6 +64,15 @@ export class WidgetScheduler {
   /** Forces an immediate refresh of every widget. */
   refreshAll() {
     for (const slot of this.slots.values()) {
+      clearTimeout(slot.timer);
+      void this.run(slot);
+    }
+  }
+
+  /** Refreshes widgets of the given types now, e.g. after an event shows tickets changed. */
+  refreshTypes(types: WidgetType[]) {
+    for (const slot of this.slots.values()) {
+      if (!types.includes(slot.widget.type)) continue;
       clearTimeout(slot.timer);
       void this.run(slot);
     }

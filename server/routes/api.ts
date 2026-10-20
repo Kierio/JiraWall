@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { DashboardConfig, ServerStatus } from '../../shared/types.js';
+import type { DashboardConfig, RadioState, ServerStatus } from '../../shared/types.js';
 import { normalizeConfig, normalizeRule, normalizeWidget } from '../defaults.js';
 import type { EventEngine } from '../events/engine.js';
 import type { JiraApi } from '../jira/client.js';
+import { searchRadio } from '../radio.js';
 import type { WidgetScheduler } from '../scheduler.js';
 import type { SseHub } from '../sse.js';
+import type { TvScheduler } from '../tv/cec.js';
 import { resolveWidget, toIssueSummary, widgetJql } from '../widgets/resolvers.js';
 
 export interface ApiDeps {
@@ -15,9 +17,13 @@ export interface ApiDeps {
   hub: SseHub;
   scheduler: WidgetScheduler;
   engine: EventEngine;
+  tv: Pick<TvScheduler, 'power' | 'status'>;
   getConfig: () => DashboardConfig;
   saveConfig: (config: DashboardConfig) => Promise<void>;
   getStatus: () => ServerStatus;
+  getRadio: () => RadioState;
+  /** Applies a partial update; returns the new state. */
+  saveRadio: (patch: unknown) => Promise<RadioState>;
 }
 
 const COOKIE = 'jd_admin';
@@ -49,6 +55,7 @@ export function registerApi(app: FastifyInstance, deps: ApiDeps) {
       { type: 'widgets', states: deps.scheduler.states() },
       { type: 'recent-events', events: deps.engine.recent() },
       { type: 'status', status: deps.getStatus() },
+      { type: 'radio', radio: deps.getRadio() },
     ]);
   });
 
@@ -146,6 +153,35 @@ export function registerApi(app: FastifyInstance, deps: ApiDeps) {
     admin.post('/api/screens/reload', async () => {
       deps.hub.broadcast({ type: 'reload' });
       return { ok: true };
+    });
+
+    admin.put('/api/radio', async (req, reply) => {
+      try {
+        return await deps.saveRadio(req.body);
+      } catch (err) {
+        return fail(reply, err, 500);
+      }
+    });
+
+    admin.get<{ Querystring: { q?: string } }>('/api/radio/search', async (req, reply) => {
+      const q = (req.query.q ?? '').trim();
+      if (!q) return { stations: [] };
+      try {
+        return { stations: await searchRadio(q) };
+      } catch (err) {
+        return fail(reply, err, 502);
+      }
+    });
+
+    admin.get('/api/tv', async () => deps.tv.status());
+
+    admin.post<{ Body: { on?: boolean } }>('/api/tv/power', async (req, reply) => {
+      try {
+        await deps.tv.power(req.body?.on === true);
+        return await deps.tv.status();
+      } catch (err) {
+        return fail(reply, err, 502);
+      }
     });
 
     admin.post('/api/jira/check', async (req, reply) => {

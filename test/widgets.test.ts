@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Widget } from '../shared/types';
-import { normalizeConfig } from '../server/defaults';
+import { normalizeConfig, normalizeWidget } from '../server/defaults';
 import type { JiraApi, RawIssue } from '../server/jira/client';
 import { groupIssues, labelsOf, resolveWidget } from '../server/widgets/resolvers';
 
@@ -51,8 +51,9 @@ describe('groupIssues', () => {
 });
 
 describe('resolveWidget', () => {
-  it('runs one count per day for trends, oldest first, with the scope applied', async () => {
+  it('falls back to one count per day for big trends, oldest first, with the scope applied', async () => {
     const { jira, counts } = recordingJira();
+    jira.search = async () => ({ issues: [], truncated: true });
     const data = await resolveWidget(
       { ...base, type: 'trend', jql: 'statusCategory = Done', dateField: 'resolved', days: 3 },
       { jira, projectScope: 'project = ABC', jiraBaseUrl: 'https://x', now: () => new Date('2026-10-14T12:00:00') },
@@ -85,6 +86,21 @@ describe('resolveWidget', () => {
       total: 7,
       truncated: false,
     });
+  });
+});
+
+describe('picture widget', () => {
+  it('needs no Jira data', async () => {
+    const { jira, counts } = recordingJira();
+    expect(await resolveWidget({ ...base, type: 'picture', imageUrl: 'https://x/logo.png' }, { jira, projectScope: '', jiraBaseUrl: 'x' })).toBeUndefined();
+    expect(counts).toEqual([]);
+  });
+
+  it('keeps only http(s) image addresses and clamps the reload interval', () => {
+    const w = normalizeWidget({ type: 'picture', imageUrl: ' https://x/cam.jpg ', fit: 'cover', imageRefreshSec: -5, hideTitle: true });
+    expect(w).toMatchObject({ type: 'picture', imageUrl: 'https://x/cam.jpg', fit: 'cover', imageRefreshSec: 0, hideTitle: true });
+    expect(normalizeWidget({ type: 'picture', imageUrl: 'javascript:alert(1)' }).imageUrl).toBeUndefined();
+    expect(normalizeWidget({ type: 'picture', fit: 'stretch' }).fit).toBeUndefined();
   });
 });
 

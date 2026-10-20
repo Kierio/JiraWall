@@ -462,6 +462,21 @@ a {
   font-weight: 600;
 }
 
+/* picture */
+.widget-bare {
+  /* no title: the image runs to the card's rounded edge */
+  padding: 0;
+}
+.picture {
+  position: absolute;
+  inset: 0;
+}
+.picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* clock */
 .clock {
   height: 100%;

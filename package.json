@@ -36,6 +36,7 @@
     "chart.js": "^4.5.1",
     "concurrently": "^9.2.5",
     "cross-env": "^7.0.3",
+    "hls.js": "^1.7.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tsx": "^4.23.15",

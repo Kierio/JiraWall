@@ -15,6 +15,7 @@ export const WIDGET_TYPES: Array<{ value: WidgetType; label: string; hint: strin
   { value: 'list', label: 'Issue list', hint: 'Top N issues (use ORDER BY)' },
   { value: 'recent-events', label: 'Recent events', hint: 'Feed of the latest event-rule animations' },
   { value: 'clock', label: 'Clock & status', hint: 'Time, date and connection status' },
+  { value: 'picture', label: 'Picture', hint: 'An image from a web address (logo, webcam, chart)' },
 ];
 
 const GROUP_FIELDS = ['status', 'statusCategory', 'assignee', 'reporter', 'priority', 'issuetype', 'labels', 'components', 'project', 'resolution'];
@@ -41,6 +42,8 @@ const defaultsFor = (type: WidgetType): Partial<Widget> => {
       return { jql: 'statusCategory != Done ORDER BY priority DESC, created ASC', limit: 7 };
     case 'recent-events':
       return { limit: 6 };
+    case 'picture':
+      return { imageUrl: '', fit: 'contain', imageRefreshSec: 0 };
     default:
       return {};
   }
@@ -160,7 +163,7 @@ function WidgetEditor({
 }) {
   const set = <K extends keyof Widget>(key: K, value: Widget[K]) => onChange({ ...widget, [key]: value });
   const [preview, setPreview] = useState<{ data?: WidgetData; error?: string; busy?: boolean }>();
-  const usesJql = widget.type !== 'clock' && widget.type !== 'recent-events';
+  const usesJql = widget.type !== 'clock' && widget.type !== 'recent-events' && widget.type !== 'picture';
   const live = stream.widgets[widget.id];
 
   const runPreview = async () => {
@@ -235,7 +238,10 @@ function WidgetEditor({
 
         {widget.type === 'trend' && (
           <>
-            <Field label="Date field" hint="Each issue is counted on the day this date falls on.">
+            <Field
+              label="Date field"
+              hint="Each issue is counted on the day this date falls on (the Pi's time). statusCategoryChangedDate only moves when the category changes, so Resolved → Closed (both Done) isn't counted again; use resolved if your workflow sets a Resolution."
+            >
               <input list="date-fields" value={widget.dateField ?? 'created'} onChange={(e) => set('dateField', e.target.value)} />
               <datalist id="date-fields">
                 {DATE_FIELDS.map((f) => (
@@ -307,6 +313,30 @@ function WidgetEditor({
                 </Field>
               </>
             )}
+          </>
+        )}
+
+        {widget.type === 'picture' && (
+          <>
+            <Field label="Image address" wide hint="An http(s) link straight to the image (PNG, JPG, GIF, SVG or WebP). The Pi must be able to reach it.">
+              <input value={widget.imageUrl ?? ''} placeholder="https://example.com/logo.png" onChange={(e) => set('imageUrl', e.target.value)} />
+            </Field>
+            <Field label="Fit" hint="Fit shows the whole image; Fill covers the card and crops the edges.">
+              <Select
+                value={widget.fit ?? 'contain'}
+                onChange={(v) => set('fit', v)}
+                options={[
+                  { value: 'contain', label: 'Fit' },
+                  { value: 'cover', label: 'Fill' },
+                ]}
+              />
+            </Field>
+            <Field label="Reload every (seconds, 0 = never)" hint="For images that change, like a webcam or a generated chart.">
+              <NumberInput value={widget.imageRefreshSec ?? 0} min={0} onChange={(v) => set('imageRefreshSec', v)} />
+            </Field>
+            <Field label="Title bar">
+              <Toggle checked={!widget.hideTitle} onChange={(v) => set('hideTitle', !v || undefined)} label={widget.hideTitle ? 'Hidden' : 'Shown'} />
+            </Field>
           </>
         )}
 

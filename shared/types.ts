@@ -23,7 +23,8 @@ export type WidgetType =
   | 'leaderboard'
   | 'list'
   | 'recent-events'
-  | 'clock';
+  | 'clock'
+  | 'picture';
 
 export interface Thresholds {
   amber: number;
@@ -69,6 +70,14 @@ export interface Widget {
   /** list / leaderboard / recent-events / breakdown: how many rows to show. */
   limit?: number;
   thresholds?: Thresholds;
+  /** picture: http(s) address of the image. */
+  imageUrl?: string;
+  /** picture: 'contain' shows the whole image, 'cover' fills the card and crops. */
+  fit?: 'contain' | 'cover';
+  /** picture: reload the image every N seconds (0 = never), e.g. for webcams or generated charts. */
+  imageRefreshSec?: number;
+  /** Hide the title bar (picture only). */
+  hideTitle?: boolean;
   refreshSec: number;
   layout: GridPos;
 }
@@ -101,6 +110,16 @@ export interface EventRule {
 
 export type ThemeMode = 'dark' | 'light' | 'scheduled';
 
+/** When the TVs are switched on and off over HDMI-CEC. */
+export interface TvSchedule {
+  enabled: boolean;
+  /** HH:MM, local time of the Pi. */
+  onAt: string;
+  offAt: string;
+  /** Days the TVs come on, 0 = Sunday … 6 = Saturday. A window that crosses midnight belongs to the day it starts. */
+  days: number[];
+}
+
 export interface Settings {
   /** Screen theme. 'scheduled' is light between lightFrom and lightUntil, dark otherwise. */
   theme: ThemeMode;
@@ -119,6 +138,7 @@ export interface Settings {
   /** Reload the screens once a day at this hour (0-23) to keep Chromium fresh. -1 disables. */
   dailyReloadHour: number;
   screenNames: Record<string, string>;
+  tv: TvSchedule;
 }
 
 export interface DashboardConfig {
@@ -206,6 +226,34 @@ export interface ServerStatus {
   jiraBaseUrl: string;
 }
 
+// ---- Radio (live state, kept apart from the saved config) ----
+
+export interface RadioState {
+  playing: boolean;
+  /** Preset id, or 'custom' for a searched / pasted stream. */
+  stationId: string;
+  name: string;
+  url: string;
+  /** 0-1 */
+  volume: number;
+  /** The screen whose browser plays the stream. */
+  screen: ScreenId;
+  /** Pause while the TV schedule says the TVs are off. */
+  onlyWhenTvOn: boolean;
+}
+
+// ---- TV power ----
+
+export type TvPower = 'on' | 'standby' | 'unknown';
+
+export interface TvStatus {
+  /** cec-ctl is installed. */
+  available: boolean;
+  devices: Array<{ device: string; power: TvPower; error?: string }>;
+  lastAction?: { on: boolean; at: number; scheduled: boolean };
+  lastError?: string;
+}
+
 export type StreamMessage =
   | { type: 'config'; config: DashboardConfig }
   | { type: 'widget'; state: WidgetState }
@@ -213,4 +261,5 @@ export type StreamMessage =
   | { type: 'event'; event: DashboardEvent }
   | { type: 'recent-events'; events: DashboardEvent[] }
   | { type: 'status'; status: ServerStatus }
+  | { type: 'radio'; radio: RadioState }
   | { type: 'reload' };

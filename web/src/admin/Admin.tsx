@@ -7,12 +7,13 @@ import { ThemeContext, useAdminThemeChoice, useAppliedTheme, type AdminThemeChoi
 import { AnimationsTab } from './AnimationsTab';
 import { LayoutTab } from './LayoutTab';
 import { previewEvent } from './preview';
+import { RadioTab } from './RadioTab';
 import { RulesTab } from './RulesTab';
 import { SettingsTab } from './SettingsTab';
 import { WidgetsTab } from './WidgetsTab';
 import './admin.css';
 
-const TABS = ['Widgets', 'Layout', 'Event rules', 'Animations', 'Settings'] as const;
+const TABS = ['Widgets', 'Layout', 'Event rules', 'Animations', 'Radio', 'Settings'] as const;
 type Tab = (typeof TABS)[number];
 
 export function Admin() {
@@ -217,6 +218,7 @@ function AdminApp({ onLogout }: { onLogout: () => void }) {
         {tab === 'Layout' && <LayoutTab draft={draft} setDraft={setDraftState} />}
         {tab === 'Event rules' && <RulesTab draft={draft} setDraft={setDraftState} playLocal={playRule} toast={toast} />}
         {tab === 'Animations' && <AnimationsTab draft={draft} setDraft={setDraftState} playLocal={playAnimation} toast={toast} />}
+        {tab === 'Radio' && <RadioTab draft={draft} stream={stream} toast={toast} />}
         {tab === 'Settings' && <SettingsTab draft={draft} setDraft={setDraftState} stream={stream} toast={toast} />}
       </main>
 

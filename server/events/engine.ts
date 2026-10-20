@@ -4,7 +4,7 @@
 import { animationById, pickAnimation } from '../../shared/animations.js';
 import { eventRuleJql, fieldIdFor } from '../../shared/jql.js';
 import type { DashboardConfig, DashboardEvent, EventIssue, EventRule, Person, Settings } from '../../shared/types.js';
-import { avatarOf, type JiraApi, type RawIssue } from '../jira/client.js';
+import { avatarOf, parseJiraDate, type JiraApi, type RawIssue } from '../jira/client.js';
 import type { SseHub } from '../sse.js';
 import type { JsonFile } from '../store.js';
 import { browseUrl } from '../widgets/resolvers.js';
@@ -37,14 +37,11 @@ export interface EngineDeps {
   random?: () => number;
   onJiraResult?: (error?: string) => void;
   onPoll?: (at: number) => void;
+  /** Called after a poll that found real (non-test) events. */
+  onEvents?: (events: DashboardEvent[]) => void;
 }
 
-/** Parses Jira timestamps like 2024-01-15T10:23:45.123+0000. */
-export function parseJiraDate(value: unknown): number | undefined {
-  if (typeof value !== 'string' || !value) return undefined;
-  const t = Date.parse(value.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
-  return Number.isNaN(t) ? undefined : t;
-}
+export { parseJiraDate };
 
 export function ruleSignature(rule: EventRule, scope: string): string {
   return JSON.stringify([scope.trim(), rule.filterJql.trim(), rule.triggerField, rule.triggerFieldId ?? '']);
@@ -195,6 +192,7 @@ export class EventEngine {
     await this.deps.store.write(this.state);
     this.deps.onJiraResult?.(error);
     this.deps.onPoll?.(now);
+    if (events.length) this.deps.onEvents?.(events);
     return events;
   }
 

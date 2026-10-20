@@ -64,6 +64,15 @@ export interface ClientOptions {
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** Parses Jira timestamps like 2024-01-15T10:23:45.123+0000. Plain dates (2024-01-15) are local midnight. */
+export function parseJiraDate(value: unknown): number | undefined {
+  if (typeof value !== 'string' || !value) return undefined;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])).getTime();
+  const t = Date.parse(value.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
+  return Number.isNaN(t) ? undefined : t;
+}
+
 export function avatarOf(user: unknown): string | undefined {
   const urls = (user as { avatarUrls?: Record<string, string> } | undefined)?.avatarUrls;
   return urls?.['48x48'] ?? urls?.['32x32'];

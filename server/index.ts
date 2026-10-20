@@ -4,16 +4,19 @@ import { fileURLToPath } from 'node:url';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
-import type { DashboardConfig, ServerStatus } from '../shared/types.js';
+import { DEFAULT_RADIO } from '../shared/radio.js';
+import type { DashboardConfig, RadioState, ServerStatus } from '../shared/types.js';
 import { defaultConfig, normalizeConfig } from './defaults.js';
 import { loadEnv } from './env.js';
 import { emptyEngineState, EventEngine, type EngineState } from './events/engine.js';
 import { JiraClient, type JiraApi } from './jira/client.js';
 import { MockJira } from './mock/jira-mock.js';
+import { normalizeRadio } from './radio.js';
 import { registerApi } from './routes/api.js';
 import { WidgetScheduler } from './scheduler.js';
 import { SseHub } from './sse.js';
 import { JsonFile } from './store.js';
+import { CecController, TvScheduler } from './tv/cec.js';
 
 const env = loadEnv();
 
@@ -30,7 +33,10 @@ const configFile = new JsonFile<DashboardConfig>(path.join(env.dataDir, 'config.
 // Mock mode keeps separate event state so switching to real Jira re-seeds cleanly.
 const stateFile = new JsonFile<EngineState>(path.join(env.dataDir, env.mock ? 'state.mock.json' : 'state.json'), emptyEngineState);
 
+const radioFile = new JsonFile<RadioState>(path.join(env.dataDir, 'radio.json'), () => DEFAULT_RADIO);
+
 let config = normalizeConfig(configFile.read());
+let radio = normalizeRadio(radioFile.read());
 if (!fs.existsSync(configFile.file)) await configFile.write(config);
 
 const hub = new SseHub();
@@ -45,6 +51,13 @@ const setStatus = (patch: Partial<ServerStatus>) => {
 const onJiraResult = (error?: string) => setStatus(error ? { jira: 'error', lastError: error } : { jira: 'ok', lastError: undefined });
 
 const scheduler = new WidgetScheduler(jira, hub, env.jiraBaseUrl, onJiraResult);
+// When an event fires, tickets just changed: bring the counting widgets up to date
+// instead of waiting for their next refresh (trends refresh only every few minutes).
+let eventRefresh: NodeJS.Timeout | undefined;
+const refreshAfterEvents = () => {
+  clearTimeout(eventRefresh);
+  eventRefresh = setTimeout(() => scheduler.refreshTypes(['number', 'number-compare', 'trend', 'leaderboard', 'breakdown', 'list']), 5000);
+};
 const engine = new EventEngine({
   jira,
   hub,
@@ -54,11 +67,16 @@ const engine = new EventEngine({
   onPoll: (at) => {
     status.lastEventPollAt = at; // not broadcast on its own; it rides along with the next status change
   },
+  onEvents: refreshAfterEvents,
 });
+
+const tv = new TvScheduler(new CecController());
 
 scheduler.apply(config);
 engine.apply(config);
 engine.start();
+tv.apply(config.settings.tv);
+tv.start();
 
 const app = Fastify({ logger: { level: 'warn' } });
 await app.register(cookie);
@@ -70,15 +88,24 @@ registerApi(app, {
   hub,
   scheduler,
   engine,
+  tv,
   getConfig: () => config,
   saveConfig: async (next) => {
     config = next;
     await configFile.write(config);
     scheduler.apply(config);
     engine.apply(config);
+    tv.apply(config.settings.tv);
     hub.broadcast({ type: 'config', config });
   },
   getStatus: () => status,
+  getRadio: () => radio,
+  saveRadio: async (patch) => {
+    radio = normalizeRadio(patch, radio);
+    await radioFile.write(radio);
+    hub.broadcast({ type: 'radio', radio });
+    return radio;
+  },
 });
 
 // Serve the built frontend (npm run build). In development Vite serves it instead.
@@ -98,6 +125,7 @@ if (fs.existsSync(path.join(webRoot, 'index.html'))) {
 const shutdown = async () => {
   engine.stop();
   scheduler.stop();
+  tv.stop();
   hub.close();
   await app.close();
   process.exit(0);

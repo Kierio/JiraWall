@@ -1,7 +1,7 @@
 import { ANIMATIONS, MOODS } from '../shared/animations.js';
 import { PRESET_RULES } from '../shared/presets.js';
 import { parseClock } from '../shared/theme.js';
-import type { DashboardConfig, EventRule, Settings, Widget, WidgetType } from '../shared/types.js';
+import type { DashboardConfig, EventRule, Settings, TvSchedule, Widget, WidgetType } from '../shared/types.js';
 import { GRID_COLS, GRID_ROWS } from '../shared/types.js';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS: Settings = {
   soundVolume: 0.4,
   dailyReloadHour: 4,
   screenNames: { '1': 'Screen 1', '2': 'Screen 2' },
+  // Off until someone sets up HDMI-CEC (deploy/setup-cec.sh) and turns it on.
+  tv: { enabled: false, onAt: '08:00', offAt: '18:00', days: [1, 2, 3, 4, 5] },
 };
 
 const w = (
@@ -97,7 +99,7 @@ export function defaultConfig(): DashboardConfig {
 
 // ---- Normalisation: fill defaults and clamp values on load / save ----
 
-const WIDGET_TYPES: WidgetType[] = ['number', 'number-compare', 'trend', 'breakdown', 'leaderboard', 'list', 'recent-events', 'clock'];
+const WIDGET_TYPES: WidgetType[] = ['number', 'number-compare', 'trend', 'breakdown', 'leaderboard', 'list', 'recent-events', 'clock', 'picture'];
 
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
 const num = (v: unknown, fallback: number, min: number, max: number): number => {
@@ -106,6 +108,15 @@ const num = (v: unknown, fallback: number, min: number, max: number): number => 
 };
 const int = (v: unknown, fallback: number, min: number, max: number) => Math.round(num(v, fallback, min, max));
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
+
+export function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 let idCounter = 0;
 export function newId(prefix: string): string {
@@ -147,6 +158,10 @@ export function normalizeWidget(raw: unknown): Widget {
     widget.showNet = r.showNet !== false;
   }
   if (r.limit !== undefined) widget.limit = int(r.limit, 6, 1, 50);
+  if (typeof r.imageUrl === 'string' && isHttpUrl(r.imageUrl.trim())) widget.imageUrl = r.imageUrl.trim();
+  if (r.fit === 'contain' || r.fit === 'cover') widget.fit = r.fit;
+  if (r.imageRefreshSec !== undefined) widget.imageRefreshSec = int(r.imageRefreshSec, 0, 0, 86400);
+  if (r.hideTitle === true) widget.hideTitle = true;
   const t = obj(r.thresholds);
   if (r.thresholds && (t.amber !== undefined || t.red !== undefined)) {
     widget.thresholds = {
@@ -180,13 +195,28 @@ export function normalizeRule(raw: unknown): EventRule {
   };
 }
 
+const clockOr = (v: unknown, fallback: string) => (parseClock(str(v)) !== undefined ? str(v) : fallback);
+
+export function normalizeTv(raw: unknown): TvSchedule {
+  const r = obj(raw);
+  const d = DEFAULT_SETTINGS.tv;
+  return {
+    enabled: r.enabled === true,
+    onAt: clockOr(r.onAt, d.onAt),
+    offAt: clockOr(r.offAt, d.offAt),
+    days: Array.isArray(r.days)
+      ? [...new Set(r.days.filter((x): x is number => Number.isInteger(x) && x >= 0 && x <= 6))].sort()
+      : [...d.days],
+  };
+}
+
 export function normalizeSettings(raw: unknown): Settings {
   const r = obj(raw);
   const names = obj(r.screenNames);
   return {
     theme: r.theme === 'light' || r.theme === 'scheduled' ? r.theme : 'dark',
-    lightFrom: parseClock(str(r.lightFrom)) !== undefined ? str(r.lightFrom) : DEFAULT_SETTINGS.lightFrom,
-    lightUntil: parseClock(str(r.lightUntil)) !== undefined ? str(r.lightUntil) : DEFAULT_SETTINGS.lightUntil,
+    lightFrom: clockOr(r.lightFrom, DEFAULT_SETTINGS.lightFrom),
+    lightUntil: clockOr(r.lightUntil, DEFAULT_SETTINGS.lightUntil),
     projectScope: str(r.projectScope, DEFAULT_SETTINGS.projectScope),
     eventPollSec: int(r.eventPollSec, DEFAULT_SETTINGS.eventPollSec, 10, 600),
     eventWindowMin: int(r.eventWindowMin, DEFAULT_SETTINGS.eventWindowMin, 2, 120),
@@ -201,6 +231,7 @@ export function normalizeSettings(raw: unknown): Settings {
       '1': str(names['1'], DEFAULT_SETTINGS.screenNames['1']),
       '2': str(names['2'], DEFAULT_SETTINGS.screenNames['2']),
     },
+    tv: normalizeTv(r.tv),
   };
 }
 

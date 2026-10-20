@@ -1,4 +1,4 @@
-import type { DashboardConfig, DashboardEvent, EventIssue, EventRule, IssueSummary, Widget, WidgetData } from '../../../shared/types';
+import type { DashboardConfig, DashboardEvent, EventIssue, EventRule, IssueSummary, RadioState, TvStatus, Widget, WidgetData } from '../../../shared/types';
 
 export class ApiError extends Error {
   constructor(
@@ -22,6 +22,14 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return data as T;
 }
 
+export interface RadioSearchResult {
+  name: string;
+  url: string;
+  favicon?: string;
+  codec?: string;
+  bitrate?: number;
+}
+
 export const api = {
   session: () => request<{ authenticated: boolean }>('GET', '/api/session'),
   login: (password: string) => request<{ authenticated: boolean }>('POST', '/api/login', { password }),
@@ -36,5 +44,9 @@ export const api = {
   previewAnimation: (animationId: string) => request<DashboardEvent>('POST', '/api/animations/preview', { animationId }),
   refresh: () => request<{ ok: boolean }>('POST', '/api/refresh', {}),
   reloadScreens: () => request<{ ok: boolean }>('POST', '/api/screens/reload', {}),
+  tvStatus: () => request<TvStatus>('GET', '/api/tv'),
+  tvPower: (on: boolean) => request<TvStatus>('POST', '/api/tv/power', { on }),
+  setRadio: (patch: Partial<RadioState>) => request<RadioState>('PUT', '/api/radio', patch),
+  searchRadio: (q: string) => request<{ stations: RadioSearchResult[] }>('GET', `/api/radio/search?q=${encodeURIComponent(q)}`),
   checkJira: () => request<{ ok: boolean; displayName: string; emailAddress?: string }>('POST', '/api/jira/check', {}),
 };

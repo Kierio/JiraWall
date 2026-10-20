@@ -5,7 +5,7 @@
 # It installs the dashboard server as a service, then runs deploy/setup-kiosk.sh so
 # the two screens open full screen at boot. Kiosk options pass straight through, e.g.:
 #   bash deploy/install.sh --wayland --swap
-# It is safe to run again after pulling updates.
+# It is safe to run again after pulling updates (or use deploy/update.sh).
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -57,6 +57,9 @@ sudo systemctl restart jira-dash
 
 # Chromium, emoji font, raspi-config (auto-login, no blanking, session) and autostart.
 bash "$DIR/deploy/setup-kiosk.sh" "$@"
+
+# cec-ctl for the TV on/off schedule (Settings > TV power on the admin page).
+bash "$DIR/deploy/setup-cec.sh" || echo "HDMI-CEC setup had problems; re-run bash deploy/setup-cec.sh later."
 
 IP="$(hostname -I | awk '{print $1}')"
 cat <<MSG

@@ -4,6 +4,7 @@ import { AnimationLayer, type AnimationLayerHandle } from '../animations/Animati
 import { useStream } from '../lib/stream';
 import { ThemeContext, useAppliedTheme } from '../lib/theme';
 import { WidgetView } from '../widgets/Widgets';
+import { RadioPlayer } from './RadioPlayer';
 
 export function Screen({ screenId }: { screenId: ScreenId }) {
   const layer = useRef<AnimationLayerHandle>(null);
@@ -42,7 +43,14 @@ export function Screen({ screenId }: { screenId: ScreenId }) {
               }}
             >
               <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
-                <WidgetView widget={widget} state={stream.widgets[widget.id]} recent={stream.recent} status={stream.status} connected={stream.connected} />
+                <WidgetView
+                  widget={widget}
+                  state={stream.widgets[widget.id]}
+                  recent={stream.recent}
+                  status={stream.status}
+                  connected={stream.connected}
+                  radioName={stream.radio?.playing ? stream.radio.name : undefined}
+                />
               </div>
             </div>
           ))}
@@ -50,6 +58,7 @@ export function Screen({ screenId }: { screenId: ScreenId }) {
       )}
       {!stream.connected && <div className="conn-badge">⚠ Reconnecting…</div>}
       <AnimationLayer ref={layer} settings={stream.config?.settings} />
+      <RadioPlayer radio={stream.radio} settings={stream.config?.settings} screenId={screenId} />
     </div>
     </ThemeContext.Provider>
   );

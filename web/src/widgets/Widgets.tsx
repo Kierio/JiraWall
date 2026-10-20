@@ -15,12 +15,15 @@ export interface WidgetProps {
   recent: DashboardEvent[];
   status?: ServerStatus;
   connected: boolean;
+  /** Station shown in the clock's status line while the radio is on. */
+  radioName?: string;
 }
 
 /** Card chrome around every widget: title, error marker, body. */
 export const WidgetView = memo(function WidgetView(props: WidgetProps) {
   const { widget, state } = props;
-  const needsData = widget.type !== 'clock' && widget.type !== 'recent-events';
+  const needsData = widget.type !== 'clock' && widget.type !== 'recent-events' && widget.type !== 'picture';
+  const showHead = widget.type !== 'clock' && !(widget.type === 'picture' && widget.hideTitle);
   const data = state?.data;
   let body: React.ReactNode;
   if (!needsData) body = <WidgetBody {...props} />;
@@ -29,8 +32,8 @@ export const WidgetView = memo(function WidgetView(props: WidgetProps) {
   else body = <div className="widget-loading">Loading…</div>;
 
   return (
-    <section className="widget">
-      {widget.type !== 'clock' && (
+    <section className={`widget ${widget.type === 'picture' && !showHead ? 'widget-bare' : ''}`}>
+      {showHead && (
         <header className="widget-head">
           <div className="widget-title">{widget.title}</div>
           {state?.error && data && (
@@ -50,9 +53,11 @@ function WidgetBody(props: WidgetProps) {
   const data = state?.data;
   switch (widget.type) {
     case 'clock':
-      return <ClockWidget status={props.status} connected={props.connected} />;
+      return <ClockWidget status={props.status} connected={props.connected} radioName={props.radioName} />;
     case 'recent-events':
       return <RecentEventsWidget events={props.recent} limit={widget.limit ?? 6} />;
+    case 'picture':
+      return <PictureWidget url={widget.imageUrl} fit={widget.fit ?? 'contain'} refreshSec={widget.imageRefreshSec ?? 0} />;
     default:
       return data ? <DataWidget widget={widget} data={data} /> : null;
   }
@@ -435,9 +440,43 @@ function RecentEventsWidget({ events, limit }: { events: DashboardEvent[]; limit
   );
 }
 
+// ---------- picture ----------
+
+function PictureWidget({ url, fit, refreshSec }: { url?: string; fit: 'contain' | 'cover'; refreshSec: number }) {
+  const [tick, setTick] = useState(0);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+    if (!url || refreshSec <= 0) return;
+    const t = setInterval(() => {
+      setTick(Date.now());
+      setFailed(false);
+    }, refreshSec * 1000);
+    return () => clearInterval(t);
+  }, [url, refreshSec]);
+  // Try a broken image again a minute later (e.g. the network wasn't up yet at boot).
+  useEffect(() => {
+    if (!failed) return;
+    const t = setTimeout(() => {
+      setTick(Date.now());
+      setFailed(false);
+    }, 60_000);
+    return () => clearTimeout(t);
+  }, [failed]);
+  if (!url) return <div className="muted" style={{ fontSize: 20 }}>No image address set</div>;
+  if (failed) return <div className="widget-error-full">⚠ Couldn't load image</div>;
+  // A cache-buster makes the browser fetch a fresh copy (webcams, generated charts).
+  const src = tick ? `${url}${url.includes('?') ? '&' : '?'}_=${tick}` : url;
+  return (
+    <div className="picture">
+      <img src={src} alt="" style={{ objectFit: fit }} onError={() => setFailed(true)} onLoad={() => setFailed(false)} />
+    </div>
+  );
+}
+
 // ---------- clock ----------
 
-function ClockWidget({ status, connected }: { status?: ServerStatus; connected: boolean }) {
+function ClockWidget({ status, connected, radioName }: { status?: ServerStatus; connected: boolean; radioName?: string }) {
   const now = useNow(1000);
   const d = new Date(now);
   let statusText: React.ReactNode;
@@ -449,7 +488,10 @@ function ClockWidget({ status, connected }: { status?: ServerStatus; connected: 
     <div className="clock">
       <div className="clock-time">{d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</div>
       <div className="clock-date">{d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-      <div className="clock-status">{statusText}</div>
+      <div className="clock-status">
+        {statusText}
+        {radioName && <span className="clock-radio">· 📻 {radioName}</span>}
+      </div>
     </div>
   );
 }

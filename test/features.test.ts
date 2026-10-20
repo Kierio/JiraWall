@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ANIMATIONS, PACKS } from '../shared/animations';
 import { PRIORITY_RANK, priorityLevel } from '../shared/priority';
-import { effectiveTheme, parseClock } from '../shared/theme';
+import { DEFAULT_RADIO, RADIO_STATIONS } from '../shared/radio';
+import { effectiveTheme, parseClock, tvShouldBeOn } from '../shared/theme';
 import type { Widget } from '../shared/types';
 import { normalizeConfig, normalizeSettings, normalizeWidget } from '../server/defaults';
-import type { JiraApi } from '../server/jira/client';
+import type { JiraApi, RawIssue } from '../server/jira/client';
+import { normalizeRadio } from '../server/radio';
 import { resolveWidget } from '../server/widgets/resolvers';
 import { LIBRARY } from '../web/src/animations/library';
 
@@ -72,25 +74,63 @@ describe('trend overlay', () => {
     days: 2,
   };
 
-  it('returns two series and queries each day for both, with the scope applied', async () => {
+  // Jira timestamps for local wall-clock times, so the tests pass in any timezone.
+  const jiraTime = (local: string) => new Date(local).toISOString().replace('Z', '+0000');
+  const issue = (key: string, fields: Record<string, unknown>): RawIssue => ({ key, fields });
+
+  function searchingJira(byField: Record<string, RawIssue[]>) {
+    const searches: Array<{ jql: string; fields: string[] }> = [];
     const counts: string[] = [];
     const jira: JiraApi = {
-      count: async (jql) => (counts.push(jql), jql.includes('created >=') ? 5 : 3),
-      search: async () => ({ issues: [], truncated: false }),
+      count: async (jql) => (counts.push(jql), 0),
+      search: async (jql, fields) => {
+        searches.push({ jql, fields });
+        return { issues: byField[fields[0]] ?? [], truncated: false };
+      },
       lastStatusChanger: async () => undefined,
       myself: async () => ({ displayName: 'me' }),
     };
+    return { jira, searches, counts };
+  }
+
+  it('makes one search per line and buckets the dates on the local calendar', async () => {
+    const { jira, searches, counts } = searchingJira({
+      statuscategorychangedate: [
+        issue('A-1', { statuscategorychangedate: jiraTime('2026-10-13T09:00:00') }),
+        issue('A-2', { statuscategorychangedate: jiraTime('2026-10-14T00:05:00') }),
+        issue('A-3', { statuscategorychangedate: jiraTime('2026-10-14T11:59:00') }),
+        // just before the window: ignored
+        issue('A-4', { statuscategorychangedate: jiraTime('2026-10-12T23:59:30') }),
+      ],
+      created: [issue('B-1', { created: jiraTime('2026-10-13T23:59:00') })],
+    });
     const data = await resolveWidget(base, { jira, projectScope: 'project = ABC', jiraBaseUrl: 'x', now: () => new Date('2026-10-14T12:00:00') });
     expect(data).toEqual({
       kind: 'trend',
       labels: ['2026-10-13', '2026-10-14'],
       series: [
-        { label: 'Closed', values: [3, 3] },
-        { label: 'Created', values: [5, 5] },
+        { label: 'Closed', values: [1, 2] },
+        { label: 'Created', values: [1, 0] },
       ],
     });
-    expect(counts).toContain('((project = ABC)) AND (created >= startOfDay() AND created < startOfDay("+1d"))');
-    expect(counts.filter((q) => q.includes('statusCategoryChangedDate >='))).toHaveLength(2);
+    expect(counts).toEqual([]);
+    // 36 hours since local midnight the day before, plus a minute of slack. Relative
+    // minutes don't depend on the Jira account's timezone.
+    expect(searches).toEqual([
+      { jql: '((project = ABC) AND (statusCategory = Done)) AND (statusCategoryChangedDate >= "-2161m")', fields: ['statuscategorychangedate'] },
+      { jql: '((project = ABC)) AND (created >= "-2161m")', fields: ['created'] },
+    ]);
+  });
+
+  it('falls back to per-day counts when the date field cannot be read', async () => {
+    const { jira, counts } = searchingJira({ 'Due Date': [issue('A-1', { duedate: '2026-10-14' })] });
+    const data = await resolveWidget(
+      { ...base, dateField: 'Due Date', overlay: undefined },
+      { jira, projectScope: '', jiraBaseUrl: 'x', now: () => new Date('2026-10-14T12:00:00') },
+    );
+    expect(counts).toHaveLength(2);
+    expect(counts[1]).toBe('((statusCategory = Done)) AND ("Due Date" >= startOfDay() AND "Due Date" < startOfDay("+1d"))');
+    expect(data).toMatchObject({ kind: 'trend', series: [{ values: [0, 0] }] });
   });
 
   it('is normalised with defaults and survives a save round-trip', () => {
@@ -115,6 +155,59 @@ describe('theme settings', () => {
   it('ships the created-vs-closed overlay in the default config', () => {
     const trend = normalizeConfig({ widgets: [{ id: 'trend', type: 'trend', overlay: { jql: '', dateField: 'created', label: 'Created' } }] }).widgets[0];
     expect(trend.overlay?.label).toBe('Created');
+  });
+});
+
+describe('TV schedule', () => {
+  const weekdays = { onAt: '08:00', offAt: '18:00', days: [1, 2, 3, 4, 5] };
+  // 2026-10-14 is a Wednesday, 2026-10-17 a Saturday.
+  it('is on inside the window on the chosen days only', () => {
+    expect(tvShouldBeOn(weekdays, at('08:00'))).toBe(true);
+    expect(tvShouldBeOn(weekdays, at('17:59'))).toBe(true);
+    expect(tvShouldBeOn(weekdays, at('18:00'))).toBe(false);
+    expect(tvShouldBeOn(weekdays, at('07:59'))).toBe(false);
+    expect(tvShouldBeOn(weekdays, new Date('2026-10-17T12:00:00'))).toBe(false);
+  });
+
+  it('gives a window that crosses midnight to the day it started', () => {
+    const nights = { onAt: '22:00', offAt: '02:00', days: [5] }; // Friday night
+    expect(tvShouldBeOn(nights, new Date('2026-10-16T23:00:00'))).toBe(true); // Fri 23:00
+    expect(tvShouldBeOn(nights, new Date('2026-10-17T01:00:00'))).toBe(true); // Sat 01:00, still Friday's window
+    expect(tvShouldBeOn(nights, new Date('2026-10-17T23:00:00'))).toBe(false); // Sat 23:00
+  });
+
+  it('is normalised with defaults and bad values dropped', () => {
+    expect(normalizeSettings({}).tv).toEqual({ enabled: false, onAt: '08:00', offAt: '18:00', days: [1, 2, 3, 4, 5] });
+    expect(normalizeSettings({ tv: { enabled: true, onAt: '7:30', offAt: '25:00', days: [6, 0, 9, 6, 'x'] } }).tv).toEqual({
+      enabled: true,
+      onAt: '7:30',
+      offAt: '18:00',
+      days: [0, 6],
+    });
+  });
+});
+
+describe('radio state', () => {
+  it('uses the built-in address for presets', () => {
+    const r = normalizeRadio({ stationId: 'bbc-radio-4', url: 'https://evil.example/x', playing: true });
+    expect(r).toMatchObject({ stationId: 'bbc-radio-4', name: 'BBC Radio 4', playing: true });
+    expect(r.url).toBe(RADIO_STATIONS.find((s) => s.id === 'bbc-radio-4')!.url);
+  });
+
+  it('accepts custom http(s) streams and keeps the rest of the state on partial updates', () => {
+    const current = normalizeRadio({ volume: 0.8, screen: 2 });
+    const r = normalizeRadio({ url: 'https://stream.example/jazz.aac', name: '  Jazz  ' }, current);
+    expect(r).toMatchObject({ stationId: 'custom', name: 'Jazz', url: 'https://stream.example/jazz.aac', volume: 0.8, screen: 2 });
+    expect(normalizeRadio({ url: 'file:///etc/passwd' }, current).url).toBe(current.url);
+  });
+
+  it('clamps volume and rejects unknown screens', () => {
+    expect(normalizeRadio({ volume: 3, screen: 7 })).toMatchObject({ volume: 1, screen: DEFAULT_RADIO.screen });
+  });
+
+  it('ships unique station ids with https addresses', () => {
+    expect(new Set(RADIO_STATIONS.map((s) => s.id)).size).toBe(RADIO_STATIONS.length);
+    expect(RADIO_STATIONS.every((s) => s.url.startsWith('https://'))).toBe(true);
   });
 });
 

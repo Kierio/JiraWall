@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DashboardConfig, DashboardEvent, ServerStatus, StreamMessage, WidgetState } from '../../../shared/types';
+import type { DashboardConfig, DashboardEvent, RadioState, ServerStatus, StreamMessage, WidgetState } from '../../../shared/types';
 
 export interface StreamState {
   config?: DashboardConfig;
   widgets: Record<string, WidgetState>;
   recent: DashboardEvent[];
   status?: ServerStatus;
+  radio?: RadioState;
   connected: boolean;
 }
 
@@ -53,6 +54,9 @@ export function useStream(options: StreamOptions = {}): StreamState {
           break;
         case 'status':
           setState((s) => ({ ...s, status: msg.status }));
+          break;
+        case 'radio':
+          setState((s) => ({ ...s, radio: msg.radio }));
           break;
         case 'event':
           onEvent.current?.(msg.event);
