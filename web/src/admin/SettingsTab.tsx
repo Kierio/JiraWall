@@ -195,6 +195,24 @@ export function SettingsTab({
   );
 }
 
+// Drawn as SVG: the Unicode power symbols (⏻ ⏾) are missing from most fonts.
+function PowerIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <path d="M8 1.75v5.5" />
+      <path d="M4.6 3.9a5.25 5.25 0 1 0 6.8 0" />
+    </svg>
+  );
+}
+
+function StandbyIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+      <path d="M13.5 9.6A5.75 5.75 0 1 1 6.4 2.5a4.6 4.6 0 0 0 7.1 7.1Z" />
+    </svg>
+  );
+}
+
 // Monday first, the way a work week reads; values are Date.getDay() numbers.
 const WEEKDAYS: Array<[number, string]> = [
   [1, 'Mon'],
@@ -278,10 +296,12 @@ function TvSection({ tv, onChange }: { tv: TvSchedule; onChange: (tv: TvSchedule
         <Field label="TVs now" wide>
           <div className="inline">
             <button className="btn" disabled={Boolean(busy)} onClick={() => power(true)}>
-              {busy === 'on' ? 'Turning on…' : '⏻ Turn on now'}
+              <PowerIcon />
+              {busy === 'on' ? 'Turning on…' : 'Turn on now'}
             </button>
             <button className="btn" disabled={Boolean(busy)} onClick={() => power(false)}>
-              {busy === 'off' ? 'Turning off…' : '⏾ Turn off now'}
+              <StandbyIcon />
+              {busy === 'off' ? 'Turning off…' : 'Turn off now'}
             </button>
             <button className="btn" disabled={Boolean(busy)} onClick={load} title="Ask the TVs for their power state">
               ⟳
